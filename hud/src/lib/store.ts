@@ -48,9 +48,11 @@ export interface EstadoHud {
   rotinaAtiva: { nome: string; passo: number; total: number } | null;
   ferramentaAtual: string | null;
   falaAtual: string;
+  editorProtocolos: string | null; // null = fechado; "" = novo; nome = editando
   acoes: {
     avisar: (texto: string, nivel?: Aviso["nivel"]) => void;
     dispensarAviso: (id: number) => void;
+    abrirEditor: (nome: string | null) => void;
   };
 }
 
@@ -84,6 +86,7 @@ export const useHud = create<EstadoHud>()((set) => ({
   rotinaAtiva: null,
   ferramentaAtual: null,
   falaAtual: "",
+  editorProtocolos: null,
   acoes: {
     avisar: (texto, nivel = "info") => {
       const id = proximoAviso++;
@@ -91,6 +94,7 @@ export const useHud = create<EstadoHud>()((set) => ({
       window.setTimeout(() => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })), nivel === "erro" ? 9000 : 6000);
     },
     dispensarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
+    abrirEditor: (nome) => set({ editorProtocolos: nome }),
   },
 }));
 

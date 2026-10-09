@@ -97,3 +97,17 @@ def test_notificar_publica_para_o_celular(app):
 
     notificar(app, "Chegou o boleto")
     assert any(e["tipo"] == "notificacao" and e["texto"] == "Chegou o boleto" for e in eventos)
+
+
+def test_editor_recusa_bloco_vazio(app):
+    import pytest
+
+    with pytest.raises(ValueError, match="Notificar no celular"):
+        app.rotinas.salvar_do_editor({"nome": "x", "gatilhos": [{"tipo": "desbloquear", "valor": True}],
+                                      "acoes": [{"tipo": "notificar", "valor": ""}]})
+    with pytest.raises(ValueError, match="Quando abrir o app"):
+        app.rotinas.salvar_do_editor({"nome": "x", "gatilhos": [{"tipo": "app_aberto", "valor": ""}],
+                                      "acoes": [{"tipo": "minimizar_tudo", "valor": True}]})
+    salvo = app.rotinas.salvar_do_editor({"nome": "x", "gatilhos": [{"tipo": "pendrive", "valor": ""}],
+                                          "acoes": [{"tipo": "minimizar_tudo", "valor": True}]})
+    assert salvo.passos == [{"minimizar_tudo": True}]

@@ -303,6 +303,23 @@ def montar(nome: str, conf: dict, *, da_ia: bool, permitidas: list[str]) -> Roti
                   gatilhos=gatilhos, condicoes=condicoes, criada_pela_ia=da_ia)
 
 
+GATILHOS_COM_TEXTO = {"frase", "app_aberto", "app_fechado", "arquivo_novo"}
+
+
+def _exigir_valores(dados: dict) -> None:
+    """O editor não pode salvar blocos vazios (ex.: "Notificar" sem texto viraria "True")."""
+    rotulos = {(grupo, i["tipo"]): i["rotulo"] for grupo in CATALOGO for i in CATALOGO[grupo]}
+    for grupo, chave, precisa in (("acoes", "acoes", lambda i: i["entrada"] in ("texto", "opcoes", "numero")),
+                                  ("gatilhos", "gatilhos", lambda i: i["tipo"] in GATILHOS_COM_TEXTO),
+                                  ("condicoes", "condicoes", lambda i: i["entrada"] in ("texto", "intervalo", "dias"))):
+        exigidos = {i["tipo"] for i in CATALOGO[grupo] if precisa(i)}
+        for bloco in dados.get(chave) or []:
+            valor = bloco.get("valor")
+            vazio = valor is None or valor is True or (isinstance(valor, (str, list)) and not str(valor).strip("[] "))
+            if bloco.get("tipo") in exigidos and vazio:
+                raise ValueError(f"Preencha o bloco \"{rotulos.get((grupo, bloco['tipo']), bloco['tipo'])}\".")
+
+
 # -- descrições em português --------------------------------------------------------------
 
 def _dias_texto(dias: list[int]) -> str:
@@ -523,6 +540,7 @@ class Rotinas:
         anterior = self.obter(nome_antigo) if nome_antigo else None
         if anterior is not None and not anterior.editavel():
             raise ValueError("Este protocolo roda comandos do sistema: edite-o no arquivo config/rotinas.yaml.")
+        _exigir_valores(dados)
         rotina = montar(str(dados.get("nome") or "").strip(), dados, da_ia=True, permitidas=ACOES_SEGURAS)
         rotina.ativo = bool(dados.get("ativo", True))
         if not rotina.gatilhos:

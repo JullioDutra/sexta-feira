@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { conexao } from "../lib/socket";
 import { useHud } from "../lib/store";
 import Ajustes from "./Ajustes";
+import EditorProtocolos from "./EditorProtocolos";
 import { Avisos, BarraComando, Cabecalho, Doca, Espelho, Legendas, Status } from "./Interface";
 import Nucleo from "./Nucleo";
 import Palco from "./Palco";
@@ -12,6 +13,8 @@ export default function Desktop() {
   const tema = useHud((s) => s.prefs?.tema ?? "sexta");
   const maosLigadas = useHud((s) => s.maosLigadas);
   const [ajustes, setAjustes] = useState(false);
+  const editor = useHud((s) => s.editorProtocolos);
+  const abrirEditor = useHud((s) => s.acoes.abrirEditor);
 
   useEffect(() => {
     conexao.conectar();
@@ -45,6 +48,7 @@ export default function Desktop() {
       <TelaBloqueio />
       <PrimeiraConfiguracao />
       {ajustes && <Ajustes aoFechar={() => setAjustes(false)} />}
+      {editor !== null && <EditorProtocolos inicial={editor} aoFechar={() => abrirEditor(null)} />}
       <Avisos />
     </main>
   );

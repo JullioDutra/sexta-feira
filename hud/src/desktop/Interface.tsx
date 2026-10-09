@@ -83,7 +83,7 @@ export function Status() {
         </Indicador>
       </div>
       <p className="text-xs text-aco">
-        {conectado ? `Cérebro local: ${modelo}` : "Reconectando à Sexta-Feira…"}
+        {conectado ? nomeCerebro(modelo) : "Reconectando à Sexta-Feira…"}
       </p>
       {Object.entries(avisos).map(([chave, texto]) => (
         <p key={chave} className="max-w-[420px] text-right text-xs text-coral leading-snug">
@@ -143,6 +143,15 @@ export function Legendas() {
       {estado === "inativa" && !visivel && <p className="text-sm text-aco/70">Diga "Sexta-Feira" ou pressione a barra de espaço.</p>}
     </div>
   );
+}
+
+/** "claude-opus-5-5" -> "Cérebro: Claude Opus 5.5"; modelos do Ollama aparecem como estão. */
+function nomeCerebro(modelo: string): string {
+  if (!modelo.startsWith("claude-")) return `Cérebro local: ${modelo}`;
+  const partes = modelo.slice(7).split("-");
+  const nome = partes.filter((p) => !/^\d+$/.test(p)).map((p) => p[0].toUpperCase() + p.slice(1));
+  const versao = partes.filter((p) => /^\d+$/.test(p)).join(".");
+  return `Cérebro: Claude ${nome.join(" ")} ${versao}`.trim();
 }
 
 const DOCA: { tipo: TipoHolograma; rotulo: string }[] = [
