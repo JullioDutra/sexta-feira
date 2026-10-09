@@ -169,7 +169,34 @@ class ClienteOllama:
             raise ErroOllama("O Ollama demorou demais para responder.") from erro
         if chamadas:
             yield {"tipo": "ferramentas", "chamadas": chamadas}
-        yield {"tipo": "fim", "texto": "".join(texto), "chamadas": chamadas}
+        yield {"tipo": "fim", "texto": "".join(texto), "chamadas": chamadas, "bruto": None}
+
+    # -- formato da volta das ferramentas (o Claude usa outro) -------------------------
+    @staticmethod
+    def mensagem_assistente(texto: str, chamadas: list[dict], bruto: Any) -> dict[str, Any]:
+        return {"role": "assistant", "content": texto,
+                "tool_calls": [{"function": {"name": c["nome"], "arguments": c["argumentos"]}} for c in chamadas]}
+
+    @staticmethod
+    def mensagens_resultados(chamadas: list[dict], conteudos: list[dict]) -> list[dict[str, Any]]:
+        return [{"role": "tool", "tool_name": c["nome"], "content": json.dumps(r, ensure_ascii=False, default=str)}
+                for c, r in zip(chamadas, conteudos)]
+
+    def uso_de_memoria(self) -> str | None:
+        """Aviso se o modelo carregado não coube inteiro na placa de vídeo (fica MUITO lento)."""
+        try:
+            r = self._http.get("/api/ps", timeout=5)
+            r.raise_for_status()
+        except httpx.HTTPError:
+            return None
+        for m in r.json().get("models", []):
+            total, vram = m.get("size") or 0, m.get("size_vram") or 0
+            if total and vram < total * 0.95:
+                pct_cpu = round(100 * (1 - vram / total))
+                return (f"O modelo {m.get('name')} está {pct_cpu}% na memória RAM/CPU porque não coube na placa de "
+                        f"vídeo — por isso as respostas ficam lentas. Use um modelo menor (ex.: qwen3.5:4b), "
+                        f"diminua OLLAMA_CONTEXTO ou use o cérebro na nuvem (CEREBRO=claude).")
+        return None
 
     def _erro_http(self, status: int, corpo: str) -> None:
         try:

@@ -64,7 +64,15 @@ class Config:
     raiz: Path = RAIZ
     dados: Path = RAIZ / "dados"
 
-    # Cérebro (Ollama)
+    # Cérebro: "claude" (nuvem, mais rápido e inteligente), "ollama" (local) ou "auto"
+    # (Claude se houver ANTHROPIC_API_KEY, senão Ollama)
+    cerebro: str = "auto"
+    claude_modelo: str = "claude-opus-5-5"
+    claude_modelo_rapido: str = "claude-haiku-5-5"  # vazio = um cérebro só
+    claude_esforco_voz: str = "low"
+    claude_esforco_texto: str = "medium"
+
+    # Cérebro local (Ollama)
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_modelo: str = "qwen3.5:9b"
     ollama_modelo_rapido: str = ""   # opcional: modelo menor só para comandos curtos ("dois cérebros")
@@ -116,6 +124,17 @@ class Config:
 
     log_nivel: str = "INFO"
 
+    def usa_claude(self) -> bool:
+        if self.cerebro == "claude":
+            return True
+        if self.cerebro == "ollama":
+            return False
+        return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+
+    @property
+    def modelo_principal(self) -> str:
+        return self.claude_modelo if self.usa_claude() else self.ollama_modelo
+
     @property
     def modelos(self) -> Path:
         return self.dados / "modelos"
@@ -138,6 +157,11 @@ class Config:
         if load_dotenv and arquivo_env.exists():
             load_dotenv(arquivo_env, override=False, encoding="utf-8")
         cfg = cls(
+            cerebro=_env_str("CEREBRO", cls.cerebro).lower(),
+            claude_modelo=_env_str("CLAUDE_MODELO", cls.claude_modelo),
+            claude_modelo_rapido=os.environ.get("CLAUDE_MODELO_RAPIDO", cls.claude_modelo_rapido).strip(),
+            claude_esforco_voz=_env_str("CLAUDE_ESFORCO_VOZ", cls.claude_esforco_voz).lower(),
+            claude_esforco_texto=_env_str("CLAUDE_ESFORCO_TEXTO", cls.claude_esforco_texto).lower(),
             ollama_url=_env_str("OLLAMA_URL", cls.ollama_url).rstrip("/"),
             ollama_modelo=_env_str("OLLAMA_MODELO", cls.ollama_modelo),
             ollama_modelo_rapido=_env_str("OLLAMA_MODELO_RAPIDO"),

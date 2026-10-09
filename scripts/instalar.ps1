@@ -57,8 +57,27 @@ Titulo "4/6  Modelos de rosto, mãos e voz (~600 MB, só na primeira vez)"
 & $Python -m sexta baixar
 if ($LASTEXITCODE -ne 0) { Aviso "Algum modelo não baixou. Dá para rodar de novo depois: iniciar.bat baixar" }
 
-# ------------------------------------------------------------------ 5. Ollama
-Titulo "5/6  Cérebro local (Ollama)"
+# ------------------------------------------------------------------ 5. Cérebro
+Titulo "5/6  Cérebro (Claude na nuvem ou Ollama local)"
+$temChave = Select-String -Path ".env" -Pattern '^\s*ANTHROPIC_API_KEY\s*=\s*\S+' -Quiet
+if (-not $temChave) {
+  Write-Host "    O Claude (nuvem) é mais rápido e inteligente, mas é pago por uso. O Ollama é grátis e offline."
+  if (Pergunta "Usar o Claude? (precisa de uma chave de console.anthropic.com)") {
+    $chave = Read-Host "    Cole a chave da API"
+    if ($chave.Trim()) {
+      if (Select-String -Path ".env" -Pattern '^\s*ANTHROPIC_API_KEY\s*=' -Quiet) {
+        (Get-Content ".env") -replace '^\s*ANTHROPIC_API_KEY\s*=.*$', "ANTHROPIC_API_KEY=$($chave.Trim())" | Set-Content ".env" -Encoding UTF8
+      } else {
+        Add-Content ".env" "`nANTHROPIC_API_KEY=$($chave.Trim())" -Encoding UTF8
+      }
+      $temChave = $true
+      Ok "chave salva no .env"
+    }
+  }
+}
+if ($temChave -and -not (Pergunta "Baixar também o modelo local (Ollama) como alternativa offline?")) {
+  Ok "usando o Claude"
+} else {
 $linha = Select-String -Path ".env" -Pattern '^\s*OLLAMA_MODELO\s*=\s*(.+)$' | Select-Object -First 1
 $Modelo = if ($linha) { $linha.Matches[0].Groups[1].Value.Trim() } else { "qwen3.5:9b" }
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
@@ -73,6 +92,7 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
   if ($LASTEXITCODE -eq 0) { Ok "modelo $Modelo pronto" } else { Aviso "Não consegui baixar $Modelo. Abra o Ollama e rode: ollama pull $Modelo" }
 } else {
   Aviso "Instale o Ollama em https://ollama.com/download e depois rode: ollama pull $Modelo"
+}
 }
 
 # ------------------------------------------------------------------ 6. Atalhos

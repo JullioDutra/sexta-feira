@@ -656,7 +656,7 @@ def registrar_ferramentas_pc(app, registro: Registro) -> None:
             b64 = visao.para_base64(imagem)
         except Exception as erro:  # noqa: BLE001
             return {"ok": False, "resumo": f"Não consegui capturar a {'câmera' if fonte == 'camera' else 'tela'}: {erro}"}
-        modelo = sexta.cfg.ollama_modelo_visao or None
+        modelo = None if sexta.cfg.usa_claude() else (sexta.cfg.ollama_modelo_visao or None)
         resposta = sexta.agente.ollama.visao(pergunta, [b64], visao.instrucao(fonte, ctx.canal), modelo=modelo)
         if fonte == "tela" and ctx.canal != "voz":
             sexta.hologramas.mostrar("texto", {"texto": resposta}, titulo="Análise da tela")

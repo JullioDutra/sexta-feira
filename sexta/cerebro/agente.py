@@ -49,6 +49,8 @@ Como agir:
 - Lembretes: passe o horário como o usuário falou ("amanhã às 7h", "daqui a 20 minutos").
 - Protocolos (automações): pedidos como "toda vez que...", "quando eu abrir...", "sempre que chegar..." viram criar_protocolo. Ele mostra o protocolo na tela e o usuário aprova com "sim".
 - Ações sensíveis (fechar, mover, apagar, desligar, comandos fora da lista) pedem confirmação sozinhas: apenas chame a ferramenta. Nunca diga que fez algo que ainda espera confirmação.
+- Memória: você lembra desta conversa e dos fatos abaixo. Quando o usuário contar algo pessoal e duradouro (nomes, preferências, datas, rotina, time, trabalho), guarde com memoria(acao=lembrar) sem pedir licença. Use esses fatos naturalmente nas respostas. Nunca diga que não tem memória.
+- Responda primeiro o que foi perguntado, sem rodeios; nada de "como uma IA" nem repetir a pergunta.
 - Se não souber algo ou não tiver ferramenta para isso, diga com franqueza.
 {estilo}
 
@@ -171,23 +173,34 @@ class SaidaFala:
 
 
 class Agente:
-    MAX_RODADAS = 5
-    HISTORICO_MAX = 16
-    OCIOSO_REINICIA = 15 * 60
+    MAX_RODADAS = 6
+    HISTORICO_MAX = 24
+    OCIOSO_REINICIA = 6 * 3600  # depois de 6 h parada, a conversa recomeça (os fatos da memória ficam)
 
-    def __init__(self, app, cliente: ClienteOllama | None = None) -> None:
+    def __init__(self, app, cliente=None) -> None:
         self.app = app
         cfg = app.cfg
-        self.ollama = cliente or ClienteOllama(
-            cfg.ollama_url, cfg.ollama_modelo, pensar=cfg.ollama_pensar, contexto=cfg.ollama_contexto,
-            temperatura=cfg.ollama_temperatura, manter_carregado=cfg.ollama_manter_carregado,
-        )
-        self.modelo_rapido = getattr(cfg, "ollama_modelo_rapido", "") or ""
+        usa_claude = cliente is None and cfg.usa_claude()
+        if cliente is not None:
+            self.ollama = cliente
+        elif usa_claude:
+            from .claude import ClienteClaude
+
+            self.ollama = ClienteClaude(cfg.claude_modelo, esforco_voz=cfg.claude_esforco_voz,
+                                        esforco_texto=cfg.claude_esforco_texto)
+        else:
+            self.ollama = ClienteOllama(
+                cfg.ollama_url, cfg.ollama_modelo, pensar=cfg.ollama_pensar, contexto=cfg.ollama_contexto,
+                temperatura=cfg.ollama_temperatura, manter_carregado=cfg.ollama_manter_carregado,
+            )
+        self.nome_cerebro = "Claude" if usa_claude else "Ollama"
+        self.modelo_rapido = (cfg.claude_modelo_rapido if usa_claude else getattr(cfg, "ollama_modelo_rapido", "")) or ""
         self.max_tokens_voz = int(getattr(cfg, "ollama_max_tokens_voz", 400) or 0)
-        self.historico: list[dict[str, str]] = []
+        self._arquivo_historico = cfg.dados / "historico.json"
+        self.historico: list[dict[str, str]] = self._carregar_historico()
         self._lock = threading.Lock()
         self._cancelar = threading.Event()
-        self._ultima_interacao = 0.0
+        self._ultima_interacao = time.time() if self.historico else 0.0
 
     # ------------------------------------------------------------------
     def cancelar(self) -> None:
@@ -196,9 +209,6 @@ class Agente:
 
     def ocupado(self) -> bool:
         return self._lock.locked()
-
-    def limpar_historico(self) -> None:
-        self.historico.clear()
 
     def aquecer(self) -> None:
         """Carrega o(s) modelo(s) e já processa o prompt de sistema + ferramentas (cache do Ollama)."""
@@ -220,8 +230,8 @@ class Agente:
         with self._lock:
             inicio = time.perf_counter()
             self._cancelar.clear()
-            if time.time() - self._ultima_interacao > self.OCIOSO_REINICIA:
-                self.historico.clear()
+            if self.historico and time.time() - self._ultima_interacao > self.OCIOSO_REINICIA:
+                self.limpar_historico()
             self._ultima_interacao = time.time()
             bus.publicar("conversa", papel="usuario", texto=texto, canal=canal, id=resposta_id)
             self.app.estado.definir("pensando")
@@ -246,7 +256,7 @@ class Agente:
                 final = str(erro)
                 bus.publicar("aviso", nivel="erro", texto=final)
                 if falar:
-                    self.app.fala.falar("Não consegui acessar meu cérebro local. Veja o aviso na tela.")
+                    self.app.fala.falar("Não consegui acessar meu cérebro. Veja o aviso na tela.")
             except Exception:  # noqa: BLE001
                 log.exception("Erro processando pedido")
                 final = "Tive um problema ao processar isso."
@@ -317,22 +327,29 @@ class Agente:
         modelo = self._escolher_modelo(texto)
         max_tokens = self.max_tokens_voz if ctx.canal == "voz" else None
         ferramentas = self.app.registro.esquemas()
+        inicio = time.perf_counter()
+        primeiro_texto: float | None = None
 
         for _rodada in range(self.MAX_RODADAS):
             filtro = FiltroTags()
             partes: list[str] = []
             chamadas: list[dict[str, Any]] = []
+            bruto: Any = None
             for evento in self.ollama.conversar(mensagens, ferramentas, self._cancelar.is_set,
                                                 modelo=modelo, max_tokens=max_tokens):
                 if evento["tipo"] == "texto":
                     visivel = filtro.alimentar(evento["texto"])
                     if visivel:
+                        if primeiro_texto is None:
+                            primeiro_texto = time.perf_counter()
                         partes.append(visivel)
                         bus.publicar("resposta.parcial", texto=visivel, id=resposta_id)
                         if saida:
                             saida.alimentar(visivel)
                 elif evento["tipo"] == "ferramentas":
                     chamadas = evento["chamadas"]
+                elif evento["tipo"] == "fim":
+                    bruto = evento.get("bruto")
             resto = filtro.finalizar()
             if resto:
                 partes.append(resto)
@@ -346,13 +363,10 @@ class Agente:
                 texto_final = texto_rodada
                 break
 
-            mensagens.append({
-                "role": "assistant",
-                "content": texto_rodada,
-                "tool_calls": [{"function": {"name": c["nome"], "arguments": c["argumentos"]}} for c in chamadas],
-            })
+            mensagens.append(self.ollama.mensagem_assistente(texto_rodada, chamadas, bruto))
             repetida = False
             resultados_rodada = []
+            conteudos = []
             for chamada in chamadas:
                 assinatura = chamada["nome"] + json.dumps(chamada["argumentos"], sort_keys=True, ensure_ascii=False)
                 repetida = repetida or assinatura in assinaturas
@@ -361,9 +375,8 @@ class Agente:
                 log.info("Ferramenta: %s %s", chamada["nome"], chamada["argumentos"])
                 resultado = self.app.registro.executar(chamada["nome"], chamada["argumentos"], ctx)
                 resultados_rodada.append(resultado)
-                conteudo = {k: v for k, v in resultado.items() if not k.startswith("_")}
-                mensagens.append({"role": "tool", "tool_name": chamada["nome"],
-                                  "content": json.dumps(conteudo, ensure_ascii=False, default=str)})
+                conteudos.append({k: v for k, v in resultado.items() if not k.startswith("_")})
+            mensagens += self.ollama.mensagens_resultados(chamadas, conteudos)
             if resultados_rodada and all(r.get("_direta") for r in resultados_rodada):
                 # o resultado já é a resposta: fala direto, sem outra ida ao modelo
                 direto = True
@@ -385,6 +398,9 @@ class Agente:
                 saida.alimentar(texto_final + " ")
         if saida:
             saida.finalizar()
+        if primeiro_texto is not None:
+            log.info("%s (%s): primeiro texto em %d ms", self.nome_cerebro, modelo or self.ollama.modelo,
+                     round((primeiro_texto - inicio) * 1000))
         self._registrar(texto, texto_final)
         return texto_final
 
@@ -392,6 +408,32 @@ class Agente:
         self.historico.append({"role": "user", "content": pergunta})
         self.historico.append({"role": "assistant", "content": resposta or "(ação executada)"})
         self.historico = self.historico[-self.HISTORICO_MAX:]
+        self._salvar_historico()
+
+    def _carregar_historico(self) -> list[dict[str, str]]:
+        """A conversa sobrevive a reinícios (o histórico vale por algumas horas)."""
+        try:
+            dados = json.loads(self._arquivo_historico.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        if time.time() - float(dados.get("atualizado", 0)) > self.OCIOSO_REINICIA:
+            return []
+        mensagens = [m for m in dados.get("mensagens", []) if m.get("role") in ("user", "assistant")
+                     and isinstance(m.get("content"), str)]
+        return mensagens[-self.HISTORICO_MAX:]
+
+    def _salvar_historico(self) -> None:
+        try:
+            tmp = self._arquivo_historico.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"atualizado": time.time(), "mensagens": self.historico}, ensure_ascii=False),
+                           encoding="utf-8")
+            tmp.replace(self._arquivo_historico)
+        except OSError as erro:
+            log.warning("Não consegui salvar o histórico da conversa: %s", erro)
+
+    def limpar_historico(self) -> None:
+        self.historico.clear()
+        self._salvar_historico()
 
     def _sistema(self, ctx: Contexto) -> str:
         """Prompt de sistema estável (sem hora): permite o cache de prompt do Ollama."""

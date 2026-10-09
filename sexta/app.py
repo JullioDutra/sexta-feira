@@ -232,7 +232,7 @@ class SextaFeira:
         self.estado.aviso("ollama", None if ok else mensagem)
         log.info(mensagem)
         if ok:
-            threading.Thread(target=self.agente.aquecer, name="aquecer-ia", daemon=True).start()
+            threading.Thread(target=self._aquecer_cerebro, name="aquecer-ia", daemon=True).start()
         self.arquivos.iniciar()
         if self.cfg.abrir_hud:
             self.abrir_hud()
@@ -261,6 +261,15 @@ class SextaFeira:
         if self.sessao.bloqueada:
             self.fala.aguardar(10)
             self.desbloquear_por_rosto(automatico=True)
+
+    def _aquecer_cerebro(self) -> None:
+        self.agente.aquecer()
+        verificar_memoria = getattr(self.agente.ollama, "uso_de_memoria", None)
+        if verificar_memoria:  # Ollama: avisa se o modelo não coube na placa de vídeo
+            aviso = verificar_memoria()
+            if aviso:
+                log.warning(aviso)
+                self.estado.aviso("ollama_memoria", aviso)
 
     def _carregar_whisper(self) -> None:
         try:

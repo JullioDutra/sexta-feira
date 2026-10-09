@@ -121,7 +121,7 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             "rosto": app.rosto.info(),
             "maos_disponivel": app.maos.disponivel(),
             "pin": app.acesso.tem_pin(),
-            "modelo": app.cfg.ollama_modelo,
+            "modelo": app.cfg.modelo_principal,
             "alarme": app.lembretes.alarme_ativo(),
         }
 

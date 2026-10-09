@@ -61,6 +61,7 @@ def cfg(tmp_path):
     c.dados = tmp_path / "dados"
     c.abrir_hud = False
     c.liberar_rede = False
+    c.cerebro = "ollama"  # os testes usam um Ollama simulado; o Claude tem testes próprios
     c.garantir_pastas()
     return c
 

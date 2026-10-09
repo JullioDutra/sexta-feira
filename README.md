@@ -1,6 +1,6 @@
 # Sexta-Feira
 
-Assistente pessoal para Windows 11: você fala "Sexta-Feira", ela responde com voz, controla o PC, mostra clima e notícias em hologramas que você pega e arrasta com as mãos na frente da webcam, reconhece seu rosto e acompanha você pelo celular. O cérebro roda no seu computador com o Ollama — sem mensalidade.
+Assistente pessoal para Windows 11: você fala "Sexta-Feira", ela responde com voz, controla o PC, mostra clima e notícias em hologramas que você pega e arrasta com as mãos na frente da webcam, reconhece seu rosto e acompanha você pelo celular. O cérebro pode ser o **Claude** (na nuvem: mais rápido e inteligente, pago por uso) ou um modelo local no **Ollama** (gratuito e offline).
 
 Inspirada no projeto [vannu07/jarvis](https://github.com/vannu07/jarvis), reescrita do zero.
 
@@ -50,6 +50,27 @@ Na primeira vez, o Windows pergunta se o Python pode usar a rede: **permita em "
 - No HUD, **F11** deixa em tela cheia — fica ótimo num segundo monitor ou numa TV.
 
 ---
+
+## Escolhendo o cérebro
+
+| | Claude (nuvem) | Ollama (local) |
+|---|---|---|
+| Qualidade | muito alta (Claude Opus 5.5) | depende do modelo que cabe na sua placa |
+| Velocidade | rápida em qualquer PC; prompt em cache por 1 h | ótima só se o modelo couber inteiro na placa de vídeo |
+| Custo | pago por uso (ver abaixo) | grátis |
+| Internet | precisa | não precisa |
+
+**Para usar o Claude:** crie uma chave em [console.anthropic.com](https://console.anthropic.com) (API Keys), coloque em `ANTHROPIC_API_KEY=` no `.env` e reinicie. Com `CEREBRO=auto` (padrão) ela passa a usar o Claude sozinha; sem chave, volta ao Ollama.
+
+- **Dois cérebros:** comandos curtos vão para o **Claude Haiku 5.5** (rápido e baratíssimo) e conversa, análise e planejamento para o **Claude Opus 5.5** (`CLAUDE_MODELO` / `CLAUDE_MODELO_RAPIDO`).
+- **Esforço:** na voz ela pensa pouco para responder rápido (`CLAUDE_ESFORCO_VOZ=low`); no texto, `medium`. Suba para `high` se preferir respostas mais elaboradas.
+- **Custo aproximado:** comandos resolvidos por atalho não custam nada. Um pedido que vai ao Opus custa em torno de US$ 0,005 (com o cache); no Haiku, uma fração disso. Acompanhe o gasto no console da Anthropic e, se quiser, defina um limite mensal por lá.
+- **Recusas:** se um filtro de segurança do Opus recusar um pedido, a própria API tenta de novo com o modelo recomendado (fallback automático, ligado por padrão).
+- **Sem internet** os atalhos continuam funcionando; o resto avisa que o cérebro está fora.
+
+**Se continuar no Ollama e estiver lento:** o log e o HUD agora avisam quando o modelo não coube na placa de vídeo e está rodando na memória RAM/CPU (a causa mais comum de lentidão extrema e de erros de memória). Nesse caso use um modelo menor (`qwen3.5:4b`), reduza `OLLAMA_CONTEXTO` ou passe para o Claude.
+
+**Memória:** a conversa sobrevive a reinícios por até 6 horas (`dados/historico.json`), e ela guarda sozinha fatos pessoais duradouros ("meu time é o Cruzeiro") em `dados/memoria.json`, que entram em todas as conversas.
 
 ## Falando com ela
 
@@ -251,7 +272,9 @@ Como "sexta-feira" também é um dia da semana, ela só ativa quando o nome é a
 
 ## Privacidade
 
-Roda no seu PC: ativação por voz, transcrição, cérebro (Ollama), reconhecimento facial e de mãos, lembretes, rotinas e memória. Saem para a internet apenas:
+Roda no seu PC: ativação por voz, transcrição, reconhecimento facial e de mãos, lembretes, rotinas, memória e — com o Ollama — o cérebro. Saem para a internet apenas:
+
+- **cérebro Claude** (se você usar) — o texto dos pedidos que não são atalhos, o histórico recente da conversa, os fatos da memória e os resultados das ferramentas; em "analisa a tela"/"o que é isso?", a imagem; em "resume o que eu copiei", o texto copiado. Tudo vai para a API da Anthropic;
 
 - **clima** — coordenadas da cidade para o Open-Meteo;
 - **notícias** — o assunto pesquisado no Google Notícias;

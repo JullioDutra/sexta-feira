@@ -14,7 +14,13 @@ def verificar_tudo(app) -> list[dict]:
         itens.append({"nome": nome, "ok": ok, "detalhe": detalhe, "dica": dica})
 
     ok, mensagem = app.agente.ollama.verificar()
-    item("Cérebro (Ollama)", ok, mensagem, "" if ok else f"Instale o Ollama e rode: ollama pull {cfg.ollama_modelo}")
+    if cfg.usa_claude():
+        item("Cérebro (Claude)", ok, mensagem, "" if ok else "Confira ANTHROPIC_API_KEY no .env e a internet")
+    else:
+        item("Cérebro (Ollama)", ok, mensagem, "" if ok else f"Instale o Ollama e rode: ollama pull {cfg.ollama_modelo}")
+        aviso = app.agente.ollama.uso_de_memoria() if ok else None
+        if aviso:
+            item("Memória de vídeo", False, aviso, "Use um modelo menor ou CEREBRO=claude")
 
     vosk = (cfg.modelos / "vosk-model-small-pt-0.3").exists()
     item("Ativação por voz (Vosk)", vosk or cfg.ativacao_motor != "vosk", "modelo presente" if vosk else "modelo ausente",
