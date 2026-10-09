@@ -21,7 +21,9 @@ from .estado import Estado
 from .eventos import Barramento
 from .habilidades import registrar_ferramentas, windows
 from .habilidades.apps import CatalogoApps
+from .habilidades.agenda import Agenda
 from .habilidades.arquivos import Arquivos
+from .habilidades.foco import ModoFoco
 from .habilidades.gatilhos import Vigia
 from .habilidades.clima import ServicoClima
 from .habilidades.hologramas import Hologramas
@@ -30,6 +32,7 @@ from .habilidades.jornal import Jornal
 from .habilidades.lembretes import Lembretes
 from .habilidades.noticias import ServicoNoticias
 from .habilidades.rotinas import Rotinas
+from .habilidades.tarefas import Tarefas
 from .habilidades.terminal import Terminal
 from .seguranca import Acesso, Sessao
 from .util.tempo import data_extenso, saudacao
@@ -45,7 +48,7 @@ log = logging.getLogger("sexta")
 
 BRIEFING_SISTEMA = """Você é a Sexta-Feira, assistente pessoal. Escreva o briefing matinal que será FALADO em voz alta, \
 em português do Brasil, a partir dos dados em JSON. Regras: no máximo 230 palavras (cerca de 2 minutos); comece com a \
-saudação e a data; depois o clima em uma frase; a agenda do dia (se vazia, diga que está livre); as principais notícias do \
+saudação e a data; depois o clima em uma frase; a agenda do dia (se vazia, diga que está livre) e as tarefas para hoje; as principais notícias do \
 Brasil e de tecnologia, cada uma em uma frase curta e clara, juntando as que falam do mesmo assunto; e os temas que o \
 usuário acompanha, se houver. Tom confiante e leve. Sem markdown, listas, emojis nem links. Termine com uma frase curta."""
 
@@ -55,6 +58,8 @@ def briefing_simples(dados: dict) -> str:
     if dados.get("clima"):
         partes.append(dados["clima"])
     partes.append(f"Na agenda: {'; '.join(dados['agenda'])}." if dados.get("agenda") else "Sua agenda de hoje está livre.")
+    if dados.get("tarefas_para_hoje"):
+        partes.append("Para hoje: " + "; ".join(dados["tarefas_para_hoje"]) + ".")
     if dados.get("brasil"):
         partes.append("No Brasil: " + "; ".join(dados["brasil"][:5]) + ".")
     if dados.get("tecnologia"):
@@ -90,6 +95,9 @@ class SextaFeira:
         self.apps = CatalogoApps(cfg.pasta_config / "apps.yaml")
         self.hologramas = Hologramas(self)
         self.lembretes = Lembretes(self, cfg.dados / "sexta.db")
+        self.tarefas = Tarefas(self, cfg.dados / "sexta.db")
+        self.agenda = Agenda(self, cfg.agenda_ics)
+        self.foco = ModoFoco(self)
         self.rotinas = Rotinas(self, cfg.pasta_config / "rotinas.yaml", cfg.pasta_config / "rotinas_criadas.yaml")
         self.arquivos = Arquivos(cfg.pastas_arquivos)
         self.layouts = Layouts(self, cfg.pasta_config / "layouts.yaml", cfg.pasta_config / "layouts_criados.yaml")
@@ -138,7 +146,14 @@ class SextaFeira:
         nome = self.prefs.get("nome") or self.prefs.get("tratamento") or "chefe"
         clima = self.registro.executar("obter_clima", {}, ctx)
         hoje = self.lembretes.do_dia(agora)
-        agenda = [f"{l['texto']} às {l['hora']}" for l in hoje if datetime.fromisoformat(l["quando"]) >= agora][:6]
+        agenda = [f"{l['texto']} às {l['hora']}" for l in hoje if datetime.fromisoformat(l["quando"]) >= agora]
+        try:
+            agenda = [self.agenda.descrever(e) for e in self.agenda.do_dia(agora.date()) if e["fim"] >= agora] + agenda
+        except Exception:  # noqa: BLE001
+            log.exception("Agenda indisponível no briefing")
+        agenda = agenda[:6]
+        tarefas = [f"{t['titulo']} ({t['prazo_texto']})" for t in self.tarefas.pendentes()
+                   if t["atrasada"] or t["prazo"] == agora.date().isoformat()][:4]
         try:
             noticias = self.jornal.dados_briefing()
             self.hologramas.mostrar("jornal", self.jornal.dados_holograma("destaques"), titulo="Jornal")
@@ -148,7 +163,7 @@ class SextaFeira:
         dados = {
             "saudacao": f"{saudacao(agora)}, {nome}", "data": data_extenso(agora),
             "clima": clima["resumo"] if clima.get("ok") else "",
-            "agenda": agenda, **noticias,
+            "agenda": agenda, "tarefas_para_hoje": tarefas, **noticias,
         }
         try:
             texto = self.agente.completar(BRIEFING_SISTEMA, json.dumps(dados, ensure_ascii=False))
@@ -271,6 +286,7 @@ class SextaFeira:
         self.rotinas.iniciar(lambda: self.contexto("voz"))
         self.vigia.iniciar()
         self.jornal.iniciar()
+        self.agenda.iniciar()
         threading.Thread(target=self._vigiar_windows, name="vigia-windows", daemon=True).start()
         threading.Thread(target=self.apps.menu_iniciar, daemon=True).start()
         if windows.WINDOWS:
@@ -359,7 +375,7 @@ class SextaFeira:
             return
         self._rodando = False
         log.info("Encerrando a Sexta-Feira")
-        for parar in (self.voz.parar, self.lembretes.parar, self.vigia.parar, self.rotinas.parar, self.jornal.parar, self.maos.desligar,
+        for parar in (self.voz.parar, self.lembretes.parar, self.vigia.parar, self.rotinas.parar, self.jornal.parar, self.agenda.parar, lambda: self.foco.encerrar(silencioso=True), self.maos.desligar,
                       self.fala.encerrar):
             try:
                 parar()

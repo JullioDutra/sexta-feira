@@ -43,7 +43,7 @@ NOMES_DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
 ACOES_SEGURAS = ["falar", "abrir", "fechar", "tocar_youtube", "pesquisar", "volume", "midia", "esperar",
                  "clima", "noticias", "briefing", "lembretes", "holograma", "print", "bloquear",
                  "layout", "minimizar_tudo", "plano_energia", "nao_perturbe", "modo_escuro", "organizar_downloads",
-                 "brilho", "notificar", "mover_arquivo"]
+                 "brilho", "notificar", "mover_arquivo", "foco", "planejar_dia", "revisao_dia", "plano_semana"]
 ACOES = ACOES_SEGURAS + ["executar"]
 GATILHOS = ["frase", "horario", "desbloquear", "app_aberto", "app_fechado", "bateria_baixa", "pendrive",
             "arquivo_novo", "wifi", "voltar_ao_pc"]
@@ -94,6 +94,10 @@ CATALOGO: dict[str, list[dict[str, Any]]] = {
         {"tipo": "briefing", "rotulo": "Briefing do dia (clima, agenda e notícias)", "entrada": "nenhum"},
         {"tipo": "lembretes", "rotulo": "Ler lembretes de hoje", "entrada": "nenhum"},
         {"tipo": "organizar_downloads", "rotulo": "Organizar Downloads", "entrada": "nenhum"},
+        {"tipo": "foco", "rotulo": "Modo foco (minutos)", "entrada": "numero", "dica": "25"},
+        {"tipo": "planejar_dia", "rotulo": "Planejar o dia", "entrada": "nenhum"},
+        {"tipo": "revisao_dia", "rotulo": "Revisão do dia", "entrada": "nenhum"},
+        {"tipo": "plano_semana", "rotulo": "Plano da semana", "entrada": "nenhum"},
         {"tipo": "mover_arquivo", "rotulo": "Mover o arquivo novo para", "entrada": "texto", "dica": "Documentos"},
         {"tipo": "print", "rotulo": "Tirar print", "entrada": "nenhum"},
         {"tipo": "bloquear", "rotulo": "Bloquear o PC", "entrada": "nenhum"},
@@ -300,7 +304,7 @@ def montar(nome: str, conf: dict, *, da_ia: bool, permitidas: list[str]) -> Roti
             gatilhos.append({"tipo": "horario", "valor": hora, "dias": _ler_dias(conf.get("dias"))})
     condicoes = [c for c in (validar_condicao(x) for x in conf.get("condicoes") or []) if c]
     return Rotina(nome=str(nome).strip(), passos=_validar_passos(conf.get("passos") or conf.get("acoes"), permitidas),
-                  gatilhos=gatilhos, condicoes=condicoes, criada_pela_ia=da_ia)
+                  gatilhos=gatilhos, condicoes=condicoes, criada_pela_ia=da_ia, ativo=_bool(conf.get("ativo", True)))
 
 
 GATILHOS_COM_TEXTO = {"frase", "app_aberto", "app_fechado", "arquivo_novo"}
@@ -642,7 +646,7 @@ class Rotinas:
             if not rotina.ativo:
                 continue
             for g in rotina.gatilhos:
-                if g["tipo"] in AUTOMATICOS:
+                if g["tipo"] in AUTOMATICOS - {"horario", "desbloquear"}:  # esses dois têm vigia próprio
                     uso.setdefault(g["tipo"], []).append(g.get("valor"))
         return uso
 
@@ -728,9 +732,14 @@ class Rotinas:
             arquivo = (variaveis or {}).get("arquivo")
             if arquivo:
                 executar("arquivos", {"acao": "mover", "alvo": str(arquivo), "destino": str(valor)}, ctx)
+        elif acao == "foco":
+            executar("foco", {"acao": "iniciar", "minutos": int(valor) if str(valor).isdigit() else None}, ctx)
+        elif acao in ("planejar_dia", "revisao_dia", "plano_semana"):
+            falar(executar("planejar", {"acao": {"planejar_dia": "dia", "revisao_dia": "revisao_dia",
+                                                 "plano_semana": "semana"}[acao]}, ctx)["resumo"])
         elif acao == "executar":
             subprocess.Popen(str(valor), shell=True)  # noqa: S602 - só vale em protocolos escritos à mão no YAML
-        if acao in ("falar", "clima", "noticias", "lembretes", "briefing"):
+        if acao in ("falar", "clima", "noticias", "lembretes", "briefing", "planejar_dia", "revisao_dia", "plano_semana"):
             app.fala.aguardar(30)  # espera terminar de falar antes do próximo passo
 
     # -- agendamento por horário ----------------------------------------------------------

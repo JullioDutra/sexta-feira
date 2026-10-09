@@ -87,6 +87,9 @@ class Config:
     ntfy_topico: str = ""
     ntfy_servidor: str = "https://ntfy.sh"
 
+    # Agenda (Google/Outlook pelo endereço iCal secreto; só leitura)
+    agenda_ics: list[str] = field(default_factory=list)
+
     # Arquivos
     pastas_arquivos: list[str] = field(default_factory=list)  # pastas extras para a busca de arquivos
 
@@ -172,6 +175,7 @@ class Config:
             ollama_manter_carregado=_env_str("OLLAMA_MANTER_CARREGADO", cls.ollama_manter_carregado),
             ollama_max_tokens_voz=_env_int("OLLAMA_MAX_TOKENS_VOZ", cls.ollama_max_tokens_voz),
             pastas_arquivos=_env_lista("PASTAS_ARQUIVOS"),
+            agenda_ics=_env_lista("AGENDA_ICS"),
             ntfy_topico=_env_str("NTFY_TOPICO"),
             ntfy_servidor=_env_str("NTFY_SERVIDOR", cls.ntfy_servidor),
             porta=_env_int("PORTA", cls.porta),
@@ -239,7 +243,14 @@ PREFERENCIAS_PADRAO: dict[str, Any] = {
     "onboarding_concluido": False,
     "saudacao_ao_iniciar": True,
     "atalhos_rapidos": True,   # comandos simples sem passar pela IA (mais rápido)
-    "presenca_camera": False,  # protocolo "quando eu voltar ao PC": também procura seu rosto na câmera
+    "presenca_camera": False,
+    "expediente_inicio": "09:00",  # "planeja meu dia" encaixa as tarefas neste horário
+    "expediente_fim": "18:00",
+    "almoco": "12:00-13:00",       # vazio = sem bloco de almoço
+    "foco_minutos": 25,
+    "foco_pausa": 5,
+    "foco_distracoes": ["Discord", "WhatsApp", "Telegram", "Steam"],
+    "aviso_reuniao_min": 10,  # protocolo "quando eu voltar ao PC": também procura seu rosto na câmera
 }
 
 # Preferências que o HUD pode alterar diretamente

@@ -157,6 +157,7 @@ function nomeCerebro(modelo: string): string {
 const DOCA: { tipo: TipoHolograma; rotulo: string }[] = [
   { tipo: "clima", rotulo: "Clima" },
   { tipo: "jornal", rotulo: "Jornal" },
+  { tipo: "tarefas", rotulo: "Tarefas" },
   { tipo: "lembretes", rotulo: "Lembretes" },
   { tipo: "rotinas", rotulo: "Protocolos" },
   { tipo: "sistema", rotulo: "Sistema" },

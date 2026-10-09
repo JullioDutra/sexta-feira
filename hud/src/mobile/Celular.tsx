@@ -8,6 +8,7 @@ import Clima from "../holograms/Clima";
 import { GlifoTipo, Icone } from "../holograms/Glifos";
 import { Atividades, Lembretes, Protocolo, Rotinas } from "../holograms/Listas";
 import Jornal from "../holograms/Jornal";
+import { Foco, Plano, Tarefas } from "../holograms/Planejamento";
 import Noticias from "../holograms/Noticias";
 import Sistema from "../holograms/Sistema";
 import Orbe from "./Orbe";
@@ -194,6 +195,16 @@ function PainelMovel({ holo }: { holo: Holograma }) {
         return <Protocolo dados={holo.dados} />;
       case "jornal":
         return <Jornal dados={holo.dados} largura={320} />;
+      case "tarefas":
+        return (
+          <div className="overflow-x-auto">
+            <Tarefas dados={holo.dados} />
+          </div>
+        );
+      case "plano":
+        return <Plano dados={holo.dados} />;
+      case "foco":
+        return <Foco dados={holo.dados} />;
       case "texto":
         return <p className="whitespace-pre-wrap text-gelo">{holo.dados?.texto}</p>;
       case "imagem":
@@ -207,7 +218,12 @@ function PainelMovel({ holo }: { holo: Holograma }) {
       <header className="flex items-center gap-2 mb-2">
         <GlifoTipo tipo={holo.tipo} tamanho={16} className="text-[var(--luz)]" />
         <h3 className="text-sm text-gelo/85 flex-1 truncate">{holo.titulo}</h3>
-        <button type="button" aria-label="Fechar" className="p-1 text-aco" onClick={() => api(`/api/hologramas/${holo.id}`, { method: "DELETE" }).catch(() => {})}>
+        <button
+          type="button"
+          aria-label="Fechar"
+          className="p-1 text-aco"
+          onClick={() => api(`/api/hologramas/${holo.id}`, { method: "DELETE" }).catch(() => {})}
+        >
           <Icone.Fechar tamanho={15} />
         </button>
       </header>
@@ -301,7 +317,14 @@ export default function Celular() {
           <label htmlFor="pin-celular" className="text-sm text-aco">
             PIN
           </label>
-          <input id="pin-celular" type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} className="flex-1 bg-transparent text-gelo numeral text-xl tracking-[0.3em] outline-none" />
+          <input
+            id="pin-celular"
+            type="password"
+            inputMode="numeric"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            className="flex-1 bg-transparent text-gelo numeral text-xl tracking-[0.3em] outline-none"
+          />
           <button type="submit" className="text-sm text-[var(--luz)]">
             Desbloquear Sexta
           </button>
@@ -310,7 +333,13 @@ export default function Celular() {
 
       <nav className="mt-3 flex gap-5 px-5 text-sm" aria-label="Seções">
         {(["conversa", "paineis"] as const).map((a) => (
-          <button key={a} type="button" aria-pressed={aba === a} onClick={() => setAba(a)} className={aba === a ? "text-gelo border-b border-[var(--luz)] pb-1" : "text-aco pb-1"}>
+          <button
+            key={a}
+            type="button"
+            aria-pressed={aba === a}
+            onClick={() => setAba(a)}
+            className={aba === a ? "text-gelo border-b border-[var(--luz)] pb-1" : "text-aco pb-1"}
+          >
             {a === "conversa" ? "Conversa" : `Painéis${hologramas.length ? ` (${hologramas.length})` : ""}`}
           </button>
         ))}
@@ -349,7 +378,12 @@ export default function Celular() {
 
       <div className="flex gap-2 overflow-x-auto px-5 pb-3 rolagem" aria-label="Atalhos">
         {acoes.map((a) => (
-          <button key={a.rotulo} type="button" onClick={a.fazer} className="shrink-0 px-3.5 py-1.5 rounded-full border border-aco/40 text-sm text-gelo/90 active:border-[var(--luz)]">
+          <button
+            key={a.rotulo}
+            type="button"
+            onClick={a.fazer}
+            className="shrink-0 px-3.5 py-1.5 rounded-full border border-aco/40 text-sm text-gelo/90 active:border-[var(--luz)]"
+          >
             {a.rotulo}
           </button>
         ))}
@@ -374,7 +408,13 @@ export default function Celular() {
             enterKeyHint="send"
             className="flex-1 min-w-0 bg-transparent text-[16px] text-gelo placeholder:text-aco/70 outline-none"
           />
-          <button type="button" aria-pressed={vozAqui} title="Resposta em voz no celular" onClick={() => setVozAqui(!vozAqui)} className={`ml-2 text-xs ${vozAqui ? "text-[var(--luz)]" : "text-aco"}`}>
+          <button
+            type="button"
+            aria-pressed={vozAqui}
+            title="Resposta em voz no celular"
+            onClick={() => setVozAqui(!vozAqui)}
+            className={`ml-2 text-xs ${vozAqui ? "text-[var(--luz)]" : "text-aco"}`}
+          >
             {vozAqui ? "Voz ligada" : "Só texto"}
           </button>
         </div>

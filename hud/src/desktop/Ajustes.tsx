@@ -238,6 +238,10 @@ export default function Ajustes({ aoFechar }: { aoFechar: () => void }) {
           <Chave rotulo="Cumprimentar ao iniciar" ligado={prefs.saudacao_ao_iniciar} aoMudar={(v) => mudar({ saudacao_ao_iniciar: v })} />
         </Secao>
 
+        <Secao titulo="Planejamento">
+          <SecaoPlanejamento prefs={prefs} mudar={mudar} />
+        </Secao>
+
         <Secao titulo="Hologramas">
           <div className="flex gap-2 py-2">
             {(
@@ -373,5 +377,73 @@ export default function Ajustes({ aoFechar }: { aoFechar: () => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+function SecaoPlanejamento({ prefs, mudar }: { prefs: Preferencias; mudar: (v: Record<string, unknown>, m?: string) => Promise<unknown> }) {
+  const [inicio, setInicio] = useState(prefs.expediente_inicio ?? "09:00");
+  const [fim, setFim] = useState(prefs.expediente_fim ?? "18:00");
+  const [almoco, setAlmoco] = useState(prefs.almoco ?? "12:00-13:00");
+  const [focoMin, setFocoMin] = useState(prefs.foco_minutos ?? 25);
+  const [focoPausa, setFocoPausa] = useState(prefs.foco_pausa ?? 5);
+  const [distracoes, setDistracoes] = useState((prefs.foco_distracoes ?? []).join(", "));
+  const [aviso, setAviso] = useState(prefs.aviso_reuniao_min ?? 10);
+  const campo = "bg-transparent border-b border-aco/50 py-1 text-gelo outline-none focus:border-[var(--luz)]";
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        mudar(
+          {
+            expediente_inicio: inicio,
+            expediente_fim: fim,
+            almoco: almoco.trim(),
+            foco_minutos: Number(focoMin) || 25,
+            foco_pausa: Number(focoPausa) || 5,
+            foco_distracoes: distracoes.split(",").map((d) => d.trim()).filter(Boolean),
+            aviso_reuniao_min: Number(aviso) || 10,
+          },
+          "Planejamento salvo.",
+        );
+      }}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <label className="text-xs text-aco">
+          Começo do expediente
+          <input type="time" value={inicio} onChange={(e) => setInicio(e.target.value)} className={`block w-full ${campo}`} />
+        </label>
+        <label className="text-xs text-aco">
+          Fim do expediente
+          <input type="time" value={fim} onChange={(e) => setFim(e.target.value)} className={`block w-full ${campo}`} />
+        </label>
+        <label className="text-xs text-aco">
+          Almoço (vazio = sem)
+          <input value={almoco} onChange={(e) => setAlmoco(e.target.value)} placeholder="12:00-13:00" className={`block w-full ${campo}`} />
+        </label>
+        <label className="text-xs text-aco">
+          Avisar reunião (min antes)
+          <input type="number" min={1} max={60} value={aviso} onChange={(e) => setAviso(Number(e.target.value))} className={`block w-full ${campo}`} />
+        </label>
+        <label className="text-xs text-aco">
+          Foco (minutos)
+          <input type="number" min={5} max={240} value={focoMin} onChange={(e) => setFocoMin(Number(e.target.value))} className={`block w-full ${campo}`} />
+        </label>
+        <label className="text-xs text-aco">
+          Pausa (minutos)
+          <input type="number" min={1} max={60} value={focoPausa} onChange={(e) => setFocoPausa(Number(e.target.value))} className={`block w-full ${campo}`} />
+        </label>
+      </div>
+      <label className="block text-xs text-aco">
+        Distrações que o modo foco fecha
+        <input value={distracoes} onChange={(e) => setDistracoes(e.target.value)} placeholder="Discord, WhatsApp, Steam" className={`block w-full ${campo}`} />
+      </label>
+      <p className="text-xs text-aco leading-snug">
+        A agenda do Google ou do Outlook entra pelo endereço iCal secreto em <code className="text-gelo">AGENDA_ICS</code> no arquivo .env.
+      </p>
+      <button type="submit" className="text-sm text-[var(--luz)] hover:text-gelo">
+        Salvar
+      </button>
+    </form>
   );
 }

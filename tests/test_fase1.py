@@ -78,7 +78,8 @@ def test_rotina_nao_pede_confirmacao(app, monkeypatch):
     fechados = []
     monkeypatch.setattr(app.apps, "fechar", lambda nome: (fechados.append(nome), (True, "ok"))[1])
     monkeypatch.setattr("sexta.habilidades.windows.definir_volume", lambda v: v)
-    app.rotinas._executar(app.rotinas.obter("modo foco"), app.contexto())
+    app.rotinas.criar("limpeza", [{"acao": "fechar", "valor": "Discord"}, {"acao": "volume", "valor": "20"}])
+    app.rotinas._executar(app.rotinas.obter("limpeza"), app.contexto())
     assert fechados == ["Discord"] and app.registro.pendente() is None
 
 

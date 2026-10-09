@@ -456,6 +456,10 @@ class Jornal:
     def _avisar(self, novidades: list[tuple[str, dict[str, Any]]]) -> None:
         from .notificacoes import notificar
 
+        foco = getattr(self.app, "foco", None)
+        if novidades and foco is not None and foco.segurar(lambda: self._avisar(novidades)):
+            return  # em modo foco: avisa na pausa
+
         por_tema: dict[str, list[dict]] = {}
         for tema, item in novidades:
             por_tema.setdefault(tema, []).append(item)

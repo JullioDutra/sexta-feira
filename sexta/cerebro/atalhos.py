@@ -96,6 +96,18 @@ _NUMEROS = {"primeira": 1, "1": 1, "segunda": 2, "2": 2, "terceira": 3, "3": 3, 
             "5": 5, "sexta": 6, "6": 6}
 _NOTICIA_N = re.compile(r"^(le|leia|ler|resume|salva|salvar|guarda) (a )?(primeira|segunda|terceira|quarta|quinta|sexta|[1-6]|"
                         r"noticia (?:numero )?[1-6])( noticia)?( de| da| do| em)?( tecnologia| brasil| destaques| temas| salvas)?$")
+_TAREFA_NOVA = re.compile(r"^(anota|anotar|adiciona (a |uma )?tarefa|cria (a |uma )?tarefa|nova tarefa|tarefa)(:| que| pra mim| para mim)? (?!na tela)(.+)$")
+_TAREFAS_VER = re.compile(r"^(quais (sao )?(as )?minhas tarefas|minhas tarefas|o que (eu )?tenho (pra|para) fazer( hoje)?|"
+                          r"(mostra|abre) (o |as |meu |minhas )?(quadro|tarefas|kanban))$")
+_TAREFA_FEITA = re.compile(r"^(conclui|concluir|terminei|finalizei|acabei|marca como feita|marca como feito|feito|ja fiz)( a tarefa| o| a)? (.+?)( como feita| como feito)?$")
+_PLANEJA = re.compile(r"^(planeja|planejar|organiza|monta) (o |meu |o meu )?dia$")
+_REVISAO = re.compile(r"^(revisao do dia|faz a revisao do dia|como foi (o meu|meu) dia)$")
+_SEMANA = re.compile(r"^(plano da semana|planeja (a |minha )?semana|como esta (a |minha )?semana)$")
+_FOCO = re.compile(r"^(pomodoro|modo foco|foco)( de| por)? ?(\d{1,3})? ?(min|minutos)?$")
+_FOCO_FIM = re.compile(r"^(encerra|encerrar|para|parar|termina|terminar|sai do|sair do|desliga) (o )?(foco|pomodoro|modo foco)$")
+_FOCO_PAUSA = re.compile(r"^(pausa|pausar) (o )?(foco|pomodoro)$")
+_FOCO_RETOMA = re.compile(r"^(retoma|retomar|continua|continuar|volta) (o |ao )?(foco|pomodoro)$")
+_FOCO_STATUS = re.compile(r"^(quanto (tempo )?falta( do| no| pro)? (foco|pomodoro)|quanto falta)$")
 _PALAVRAS_ARQUIVO = re.compile(r"\b(pdf|arquivo|arquivos|planilha|documento|foto|fotos|imagem|video|contrato|apresentacao)\b")
 
 
@@ -114,7 +126,7 @@ def tentar(texto: str, ctx) -> str | None:
     t = re.sub(r"^(sexta feira|sexta) ", "", t)
     if not t:
         return None
-    plano = _casar(t, ctx)
+    plano = _casar(t, ctx, texto)
     if plano is not None:
         return plano()
     partes = [p.strip() for p in re.split(r" e depois | depois | e tambem | e ", t) if p.strip()]
@@ -129,7 +141,13 @@ def tentar(texto: str, ctx) -> str | None:
     return (texto_final + " " + " ".join(pendentes)).strip() if pendentes else texto_final
 
 
-def _casar(t: str, ctx) -> Plano | None:
+def _sem_comando(original: str) -> str:
+    """ "Sexta-Feira, anota: terminar o Sistema até sexta" -> "terminar o Sistema até sexta" (com acentos)."""
+    return re.sub(r"^\W*(?:(?:ei\W+)?sexta(?:[\s-]*feira)?\W+)?(?:anota|anotar|adiciona(?: a| uma)? tarefa|cria(?: a| uma)? tarefa|"
+                  r"nova tarefa|tarefa)(?:\s*:|\s+que|\s+pra mim|\s+para mim)?\s*", "", original, flags=re.I).strip()
+
+
+def _casar(t: str, ctx, original: str | None = None) -> Plano | None:
     """Reconhece o comando e devolve uma função que o executa (sem executar nada ainda)."""
     app = ctx.app
     tratamento = app.prefs.get("tratamento") or "chefe"
@@ -193,6 +211,39 @@ def _casar(t: str, ctx) -> Plano | None:
         return rodar("holograma", {"acao": "fechar", "tipo": tipo})
     if _ATIVIDADES.match(t):
         return rodar("atividades", {"acao": "resumo_hoje"})
+
+    # -- planejamento
+    if m := _TAREFA_NOVA.match(t):
+        from ..habilidades.tarefas import interpretar_tarefa
+
+        campos = interpretar_tarefa(_sem_comando(original) if original else m.group(5))
+        args = {"acao": "criar", "titulo": campos["titulo"]}
+        if campos.get("prazo"):
+            args["prazo"] = campos["prazo"].isoformat()
+        for chave in ("prioridade", "estimativa", "projeto"):
+            if campos.get(chave):
+                args[chave] = campos[chave]
+        return rodar("tarefas", args)
+    if _TAREFAS_VER.match(t):
+        return rodar("tarefas", {"acao": "mostrar_quadro"})
+    if m := _TAREFA_FEITA.match(t):
+        return rodar("tarefas", {"acao": "concluir", "alvo": m.group(3)})
+    if _PLANEJA.match(t):
+        return rodar("planejar", {"acao": "dia"})
+    if _REVISAO.match(t):
+        return rodar("planejar", {"acao": "revisao_dia"})
+    if _SEMANA.match(t):
+        return rodar("planejar", {"acao": "semana"})
+    if _FOCO_FIM.match(t):
+        return rodar("foco", {"acao": "encerrar"})
+    if _FOCO_PAUSA.match(t):
+        return rodar("foco", {"acao": "pausar"})
+    if _FOCO_RETOMA.match(t):
+        return rodar("foco", {"acao": "retomar"})
+    if _FOCO_STATUS.match(t) and app.foco.estado():
+        return rodar("foco", {"acao": "status"})
+    if (m := _FOCO.match(t)) and m.group(3):  # "modo foco" sem minutos fica com o protocolo "modo foco"
+        return rodar("foco", {"acao": "iniciar", "minutos": int(m.group(3))})
 
     # -- jornal
     if _JORNAL.match(t):

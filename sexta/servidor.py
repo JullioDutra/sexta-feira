@@ -139,6 +139,13 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
         valores = await request.json()
         if not isinstance(valores, dict):
             raise HTTPException(400, "JSON inválido")
+        import re
+
+        for chave in ("expediente_inicio", "expediente_fim"):
+            if chave in valores and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(valores[chave])):
+                raise HTTPException(400, "Horário inválido: use HH:MM, por exemplo 09:00.")
+        if valores.get("almoco") and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d", str(valores["almoco"])):
+            raise HTTPException(400, "Almoço inválido: use 12:00-13:00 (ou deixe vazio).")
         cidade = valores.pop("cidade", None)
         cidade = str(cidade).strip() if cidade is not None else ""
         if cidade and cidade not in (app.prefs.get("cidade"), app.prefs.get("cidade_rotulo")):
@@ -448,6 +455,58 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             dados = await asyncio.to_thread(app.jornal.dados_holograma, "salvas")
             app.hologramas.atualizar_tipo("jornal", dados)
         return {"ok": True}
+
+    # -------------------------------------------------------------- tarefas (quadro Kanban)
+    @api.get("/api/tarefas")
+    def listar_tarefas(_: Cliente = Depends(autenticado)):
+        return app.tarefas.quadro()
+
+    @api.post("/api/tarefas")
+    async def criar_tarefa(request: Request, _: Cliente = Depends(autenticado)):
+        from .habilidades.tarefas import interpretar_tarefa
+
+        texto = str((await request.json()).get("texto") or "").strip()
+        if not texto:
+            raise HTTPException(400, "Escreva a tarefa.")
+        campos = interpretar_tarefa(texto)  # "revisar relatório até sexta, urgente" funciona aqui também
+        try:
+            nova = app.tarefas.criar(campos.pop("titulo"), **campos)
+        except ValueError as erro:
+            raise HTTPException(400, str(erro)) from None
+        app.hologramas.atualizar_tipo("tarefas", app.tarefas.quadro())
+        return nova
+
+    @api.patch("/api/tarefas/{id_}")
+    async def editar_tarefa(id_: int, request: Request, _: Cliente = Depends(autenticado)):
+        from .habilidades.tarefas import interpretar_prazo
+
+        dados = await request.json()
+        if "prazo" in dados and dados["prazo"]:
+            dados["prazo"] = interpretar_prazo(str(dados["prazo"])) if not str(dados["prazo"])[:4].isdigit() \
+                else str(dados["prazo"])[:10]
+        try:
+            tarefa = app.tarefas.atualizar(id_, **dados)
+        except ValueError as erro:
+            raise HTTPException(400, str(erro)) from None
+        if tarefa is None:
+            raise HTTPException(404, "Tarefa não encontrada.")
+        app.hologramas.atualizar_tipo("tarefas", app.tarefas.quadro())
+        return tarefa
+
+    @api.delete("/api/tarefas/{id_}")
+    def apagar_tarefa(id_: int, _: Cliente = Depends(autenticado)):
+        if not app.tarefas.apagar(id_):
+            raise HTTPException(404, "Tarefa não encontrada.")
+        app.hologramas.atualizar_tipo("tarefas", app.tarefas.quadro())
+        return {"ok": True}
+
+    @api.post("/api/foco")
+    async def controlar_foco(request: Request, cliente: Cliente = Depends(autenticado)):
+        acao = str((await request.json()).get("acao") or "")
+        if acao not in ("pausar", "retomar", "encerrar", "iniciar"):
+            raise HTTPException(400, "Ação inválida.")
+        resultado = await asyncio.to_thread(app.registro.executar, "foco", {"acao": acao}, app.contexto("texto", cliente))
+        return {"texto": resultado["resumo"]}
 
     # -------------------------------------------------------------- protocolos (editor visual)
     @api.get("/api/protocolos")

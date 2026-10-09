@@ -16,13 +16,13 @@ from . import sistema_info
 log = logging.getLogger(__name__)
 
 TIPOS = ["clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "texto",
-         "imagem", "protocolo", "jornal"]
+         "imagem", "protocolo", "jornal", "tarefas", "plano", "foco"]
 TITULOS = {
     "clima": "Clima", "noticias": "Notícias", "sistema": "Sistema", "relogio": "Relógio", "globo": "Globo",
     "lembretes": "Lembretes", "rotinas": "Protocolos", "camera": "Câmera", "atividades": "Registro de atividades",
-    "texto": "Nota", "imagem": "Imagem", "protocolo": "Novo protocolo", "jornal": "Jornal",
+    "texto": "Nota", "imagem": "Imagem", "protocolo": "Novo protocolo", "jornal": "Jornal", "tarefas": "Tarefas", "plano": "Plano do dia", "foco": "Modo foco",
 }
-UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "protocolo", "jornal"}
+UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "protocolo", "jornal", "tarefas", "plano", "foco"}
 
 
 class Hologramas:
@@ -99,6 +99,8 @@ class Hologramas:
             return app.atividades.para_holograma()
         if tipo == "jornal":
             return app.jornal.dados_holograma()
+        if tipo == "tarefas":
+            return app.tarefas.quadro()
         if tipo == "globo":
             prefs = app.prefs
             if prefs.get("cidade_lat") is not None:

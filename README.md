@@ -23,6 +23,7 @@ Inspirada no projeto [vannu07/jarvis](https://github.com/vannu07/jarvis), reescr
 | **Automações** | Abre apps (inclusive da Microsoft Store), sites e pastas; fecha programas; controla mídia e volume; tira print; bloqueia a tela; desliga/reinicia com confirmação; pesquisa e toca no YouTube. |
 | **Protocolos** | Automações com gatilho → condição → ação. Gatilhos: frase, horário, desbloquear o PC, abrir/fechar um app, bateria baixa, pendrive, arquivo novo numa pasta, rede Wi-Fi, voltar ao PC. Condições: dias, faixa de horário, em reunião, chovendo, rede. Crie por voz ("toda vez que eu abrir o Valorant, fecha o Chrome e coloca o PC no desempenho máximo"): ela mostra o protocolo e você aprova. |
 | **Jornal** | Briefing matinal de até 2 minutos (clima, agenda, 5 notícias do Brasil e 5 de tecnologia). Holograma com abas Destaques / Brasil / Tecnologia / Seus temas / Salvas; a mesma notícia de várias fontes vira uma só. "Me avisa quando sair notícia de RTX 60" gera alerta por voz e no celular. |
+| **Planejamento** | Tarefas com prazo, prioridade e estimativa ("anota: terminar o sistema do campeonato até sexta"), quadro Kanban, "planeja meu dia" (linha do tempo), modo foco com Pomodoro, revisão do dia, plano da semana e agenda do Google/Outlook. |
 | **Lembretes e alarmes** | "Me lembra de ligar pro João amanhã às 10h", "me acorda às 7 todo dia útil", "timer de 15 minutos". |
 | **Celular** | Mesma interface no navegador do celular: segure para falar, escreva, toque nos atalhos, veja os painéis e ouça a resposta no próprio celular. |
 | **Memória** | "Lembra que meu time é o Cruzeiro" — ela guarda e usa nas próximas conversas. |
@@ -184,6 +185,16 @@ O reconhecimento facial da Sexta-Feira é bom para o dia a dia, mas não substit
 
 ---
 
+## Planejamento
+
+- **Tarefas por voz:** "anota: terminar o sistema do campeonato até sexta", "anota pagar o boleto amanhã, urgente", "nova tarefa revisar o relatório do projeto Sexta até dia 20, leva 2 horas". Ela entende prazo, prioridade (urgente/sem pressa), estimativa e projeto. "Terminei o boleto", "adia o relatório para segunda", "quais são minhas tarefas?".
+- **Quadro Kanban** (ícone na barra lateral ou "mostra o quadro"): A fazer / Fazendo / Feito. Arraste os cards com o mouse ou use ◀ ▶ (funciona apontando com a mão). Dá para anotar direto no campo de baixo.
+- **"Planeja meu dia":** junta compromissos da agenda, lembretes com horário e o almoço como blocos fixos e encaixa as tarefas por urgência (atrasadas, prazo, prioridade) no seu expediente, com pausa de 15 min a cada ~90 min. Aparece como linha do tempo; o que não couber é avisado.
+- **Modo foco:** "modo foco", "pomodoro de 50 minutos", "pausa o foco", "quanto falta?", "encerra o foco". Liga o não perturbe, fecha as distrações (lista em Ajustes → Planejamento) e segura os alertas de notícias até a pausa — só ela te interrompe.
+- **Revisão do dia** (21h) e **plano da semana** (domingo, 19h) já vêm como protocolos em `config/rotinas.yaml`; ajuste o horário ou desligue no editor de protocolos. Na revisão, o que era para hoje e não foi feito passa para amanhã.
+- **Agenda (opcional):** cole em `AGENDA_ICS` no `.env` o endereço iCal secreto do Google Agenda (Configurações da agenda → "Endereço secreto no formato iCal") ou o link ICS publicado do Outlook. É só leitura, sem login. Os compromissos entram no plano do dia, no briefing e ela avisa minutos antes ("chefe, a daily começa em 10 minutos").
+- **Ajustes → Planejamento:** expediente, almoço, minutos de foco e pausa, distrações e antecedência do aviso de reunião.
+
 ## Jornal (central de notícias)
 
 - **"Abre o jornal"** (ou o ícone na barra lateral): abas **Destaques**, **Brasil**, **Tecnologia**, **Seus temas** e **Salvas**. A mesma notícia dada por várias fontes aparece uma vez só, com "(3 fontes)" — e sobe nos destaques.
@@ -262,6 +273,8 @@ Em `config/apps.yaml` você cria apelidos ("meu jogo" → caminho do .exe, "camp
 | `OLLAMA_MODELO_VISAO` | modelo com visão para "analisa a tela" (vazio = o principal) |
 | `OLLAMA_MANTER_CARREGADO` | quanto tempo o modelo fica na memória sem uso (padrão `4h`; `-1` = sempre) |
 | `PASTAS_ARQUIVOS` | pastas extras para a busca de arquivos, separadas por vírgula |
+| `AGENDA_ICS` | endereços iCal secretos do Google Agenda/Outlook (só leitura) |
+| `NTFY_TOPICO` | tópico do app ntfy para receber notificações com o celular bloqueado |
 | `OLLAMA_PENSAR` | `sim` deixa o modelo "pensar" antes de responder (mais lento) |
 | `WHISPER_MODELO` | `small` (padrão), `base` (mais rápido), `large-v3-turbo` (melhor, com GPU NVIDIA) |
 | `VOZ_MOTOR` | `edge` (voz neural, online) ou `windows` (100% offline) |
@@ -289,6 +302,7 @@ Roda no seu PC: ativação por voz, transcrição, reconhecimento facial e de m�
 - **clima** — coordenadas da cidade para o Open-Meteo;
 - **notícias** — o Jornal baixa os feeds das fontes de `config/noticias.yaml`, os temas que você acompanha são pesquisados no Google Notícias e, ao ler uma matéria, a página dela é aberta;
 - **voz neural** — o texto de cada resposta vai para o serviço de voz da Microsoft (use `VOZ_MOTOR=windows` para ficar 100% offline);
+- **agenda** — o calendário é baixado do endereço iCal que você configurou (Google/Microsoft);
 - **YouTube e pesquisas** — quando você pede.
 
 Seus dados ficam na pasta `dados/` (apague a pasta para zerar tudo). O acesso ao HUD exige uma chave que a própria Sexta-Feira gera, então sites abertos no navegador não conseguem mandar comandos para ela.

@@ -146,3 +146,20 @@ def test_tokens_persistem_e_dispositivos_tem_hash(tmp_path):
     assert token not in conteudo  # só o hash fica salvo
     b = Acesso(tmp_path / "acesso.json")
     assert b.token_pc == a.token_pc and b.autenticar(token).nome == "Pixel"
+
+
+def test_preferencias_de_planejamento_validadas(cliente, app):
+    assert cliente.patch("/api/preferencias", json={"expediente_inicio": "9h"}, headers=cab(app)).status_code == 400
+    assert cliente.patch("/api/preferencias", json={"almoco": "meio-dia"}, headers=cab(app)).status_code == 400
+    r = cliente.patch("/api/preferencias", json={"expediente_inicio": "08:30", "almoco": ""}, headers=cab(app))
+    assert r.status_code == 200 and r.json()["expediente_inicio"] == "08:30"
+
+
+def test_quadro_de_tarefas_pela_api(cliente, app):
+    r = cliente.post("/api/tarefas", json={"texto": "revisar o relatório até amanhã, urgente"}, headers=cab(app))
+    assert r.status_code == 200 and r.json()["titulo"] == "Revisar o relatório" and r.json()["prioridade"] == "alta"
+    id_ = r.json()["id"]
+    assert cliente.patch(f"/api/tarefas/{id_}", json={"status": "fazendo"}, headers=cab(app)).json()["status"] == "fazendo"
+    assert cliente.patch(f"/api/tarefas/{id_}", json={"status": "voando"}, headers=cab(app)).status_code == 400
+    assert [t["id"] for t in cliente.get("/api/tarefas", headers=cab(app)).json()["colunas"]["fazendo"]] == [id_]
+    assert cliente.delete(f"/api/tarefas/{id_}", headers=cab(app)).json()["ok"]

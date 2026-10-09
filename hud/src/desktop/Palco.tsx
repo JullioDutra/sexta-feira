@@ -12,6 +12,7 @@ import Noticias from "../holograms/Noticias";
 import Relogio from "../holograms/Relogio";
 import Sistema from "../holograms/Sistema";
 import Jornal from "../holograms/Jornal";
+import { Foco, Plano, Tarefas } from "../holograms/Planejamento";
 import { ALTURA_NUCLEO } from "./Nucleo";
 
 export interface Pose {
@@ -208,6 +209,12 @@ function Conteudo({ holo }: { holo: Holograma }) {
       return <Protocolo dados={holo.dados} />;
     case "jornal":
       return <Jornal dados={holo.dados} />;
+    case "tarefas":
+      return <Tarefas dados={holo.dados} />;
+    case "plano":
+      return <Plano dados={holo.dados} />;
+    case "foco":
+      return <Foco dados={holo.dados} />;
     case "imagem":
       return <Imagem dados={holo.dados} />;
     default:

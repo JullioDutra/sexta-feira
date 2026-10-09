@@ -882,3 +882,143 @@ def registrar_ferramentas_jornal(app, registro: Registro) -> None:
             "briefing matinal", [{"acao": "briefing", "valor": "true"}],
             gatilhos=[{"tipo": "horario", "valor": hora, "dias": dias or ["todos"]}]))
         return {"ok": True, "resumo": f"Briefing agendado para as {hora}."}
+
+    registrar_ferramentas_planejamento(app, registro)
+
+
+# ---------------------------------------------------------------------------
+# Fase 4: planejamento de atividades
+# ---------------------------------------------------------------------------
+
+def registrar_ferramentas_planejamento(app, registro: Registro) -> None:
+    from datetime import date
+
+    from . import planejador
+    from .tarefas import PRIORIDADES, STATUS, interpretar_prazo
+
+    ferramenta = registro.ferramenta
+
+    def data_prazo(texto: str | None):
+        if not texto:
+            return None
+        try:
+            return date.fromisoformat(texto.strip())
+        except ValueError:
+            return interpretar_prazo(texto)
+
+    @ferramenta(
+        "tarefas",
+        "Tarefas e projetos (quadro Kanban): criar ('anota: terminar o sistema até sexta'), listar, concluir, "
+        "mover entre a_fazer/fazendo/feito, adiar, apagar e mostrar o quadro em holograma.",
+        direta=True, nivel=lambda a: CONFIRMAR if a.get("acao") == "apagar" else LIVRE,
+        descrever=lambda a: f"apagar a tarefa {a.get('alvo', '')}",
+        acao=P("string", "Ação.", enum=["criar", "listar", "concluir", "mover", "adiar", "apagar", "mostrar_quadro"],
+               obrigatorio=True),
+        titulo=P("string", "Para criar: o que fazer, sem o prazo. Ex.: 'terminar o sistema do campeonato'."),
+        prazo=P("string", "Prazo como o usuário falou: 'sexta', 'amanhã', 'dia 20', 'fim do mês'. Para adiar: o novo prazo."),
+        prioridade=P("string", "Prioridade.", enum=PRIORIDADES),
+        estimativa=P("integer", "Tempo estimado em minutos."),
+        projeto=P("string", "Projeto (opcional)."),
+        alvo=P("string", "Para concluir/mover/adiar/apagar: parte do título da tarefa ou o número dela."),
+        status=P("string", "Para mover: a coluna de destino.", enum=STATUS),
+    )
+    def tarefas(ctx, acao: str, titulo: str | None = None, prazo: str | None = None, prioridade: str | None = None,
+                estimativa: int | None = None, projeto: str | None = None, alvo: str | None = None,
+                status: str | None = None):
+        t = app.tarefas
+        if acao == "criar":
+            if not titulo:
+                return {"ok": False, "resumo": "O que devo anotar?"}
+            data = data_prazo(prazo)
+            nova = t.criar(titulo, data, prioridade or "media", estimativa, projeto or "")
+            quando = f" para {nova['prazo_texto']}" if nova["prazo_texto"] else ""
+            if app.hologramas.aberto("tarefas"):
+                app.hologramas.atualizar_tipo("tarefas", t.quadro())
+            return {"ok": True, "resumo": f"Anotado: {nova['titulo']}{quando}."}
+        if acao in ("listar", "mostrar_quadro"):
+            app.hologramas.mostrar("tarefas", t.quadro(), titulo="Tarefas")
+            pendentes = t.pendentes()
+            if not pendentes:
+                return {"ok": True, "resumo": "Nenhuma tarefa pendente. Quadro limpo."}
+            itens = "; ".join(f"{p['titulo']}" + (f" ({p['prazo_texto']})" if p["prazo_texto"] else "") for p in pendentes[:4])
+            return {"ok": True, "resumo": f"Você tem {len(pendentes)} pendente{'s' if len(pendentes) > 1 else ''}: {itens}."}
+        tarefa = t.encontrar(alvo or titulo or "")
+        if tarefa is None:
+            return {"ok": False, "resumo": f"Não achei a tarefa '{alvo or titulo}'.", "_direta": True}
+        if acao == "concluir":
+            t.atualizar(tarefa["id"], status="feito")
+            restantes = len(t.pendentes())
+            return {"ok": True, "resumo": f"Feito: {tarefa['titulo']}. " + (f"Faltam {restantes}." if restantes else "Tudo em dia!")}
+        if acao == "mover":
+            if status not in STATUS:
+                return {"ok": False, "resumo": "Para qual coluna? A fazer, fazendo ou feito."}
+            t.atualizar(tarefa["id"], status=status)
+            return {"ok": True, "resumo": f"{tarefa['titulo']}: {status.replace('_', ' ')}."}
+        if acao == "adiar":
+            data = data_prazo(prazo or "amanhã")
+            if data is None:
+                return {"ok": False, "resumo": "Para quando?"}
+            atualizada = t.atualizar(tarefa["id"], prazo=data)
+            return {"ok": True, "resumo": f"{tarefa['titulo']} ficou para {atualizada['prazo_texto']}."}
+        t.apagar(tarefa["id"])
+        return {"ok": True, "resumo": f"Tarefa apagada: {tarefa['titulo']}."}
+
+    @ferramenta(
+        "planejar",
+        "Planejamento: 'planeja meu dia' (monta blocos de horário com tarefas, lembretes e compromissos e mostra a "
+        "linha do tempo), revisão do dia (o que foi feito e o que passa para amanhã) e plano da semana.",
+        direta=True,
+        acao=P("string", "Ação.", enum=["dia", "revisao_dia", "semana"], obrigatorio=True),
+    )
+    def planejar(ctx, acao: str):
+        hoje = date.today()
+        if acao == "revisao_dia":
+            return {"ok": True, "resumo": planejador.revisao_do_dia(app, hoje)}
+        if acao == "semana":
+            resumo, dias = planejador.plano_da_semana(app, hoje)
+            app.hologramas.mostrar("plano", {"semana": dias}, titulo="Plano da semana")
+            return {"ok": True, "resumo": resumo}
+        from datetime import datetime
+
+        prefs = app.prefs
+        blocos, sobras = planejador.planejar_dia(
+            datetime.now(), app.tarefas.pendentes(), planejador.blocos_fixos(app, hoje),
+            prefs.get("expediente_inicio") or "09:00", prefs.get("expediente_fim") or "18:00", prefs.get("almoco") or None)
+        app.hologramas.mostrar("plano", {"blocos": [b.para_dict() for b in blocos], "sobras": [s["titulo"] for s in sobras],
+                                         "data": hoje.strftime("%d/%m")}, titulo="Plano do dia")
+        return {"ok": True, "resumo": planejador.resumo_do_plano(blocos, sobras)}
+
+    @ferramenta(
+        "foco",
+        "Modo foco (Pomodoro): iniciar (silencia notificações e fecha distrações), pausar, retomar, encerrar ou "
+        "dizer quanto falta.",
+        direta=True,
+        acao=P("string", "Ação.", enum=["iniciar", "pausar", "retomar", "encerrar", "status"], obrigatorio=True),
+        minutos=P("integer", "Minutos de foco por ciclo (padrão 25)."),
+        pausa=P("integer", "Minutos de pausa (padrão 5)."),
+        ciclos=P("integer", "Quantos ciclos (padrão 4)."),
+        tarefa=P("string", "Tarefa em que vai focar (opcional)."),
+    )
+    def foco(ctx, acao: str, minutos: int | None = None, pausa: int | None = None, ciclos: int | None = None,
+             tarefa: str | None = None):
+        f = app.foco
+        if acao == "iniciar":
+            alvo = app.tarefas.encontrar(tarefa) if tarefa else None
+            if alvo:
+                app.tarefas.atualizar(alvo["id"], status="fazendo")
+            e = f.iniciar(minutos, pausa, ciclos, alvo["titulo"] if alvo else tarefa)
+            em = f" em {e['tarefa']}" if e["tarefa"] else ""
+            return {"ok": True, "resumo": f"Foco{em} por {e['minutos']} minutos. Notificações silenciadas."}
+        if acao == "pausar":
+            return {"ok": True, "resumo": "Foco pausado." if f.pausar() else "Não há foco rodando."}
+        if acao == "retomar":
+            return {"ok": True, "resumo": "Retomando." if f.retomar() else "Não há foco pausado."}
+        if acao == "encerrar":
+            e = f.encerrar()
+            return {"ok": True, "resumo": "Foco encerrado. Notificações de volta." if e else "Não há foco rodando."}
+        e = f.estado()
+        if not e:
+            return {"ok": True, "resumo": "O modo foco está desligado."}
+        minutos_restantes = max(1, round(e["restante"] / 60))
+        return {"ok": True, "resumo": f"{'Pausa' if e['fase'] == 'pausa' else 'Foco'}: faltam {minutos_restantes} minutos, "
+                                      f"ciclo {e['ciclo']} de {e['ciclos']}."}

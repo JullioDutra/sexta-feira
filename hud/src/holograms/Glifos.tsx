@@ -157,6 +157,22 @@ export function GlifoTipo({ tipo, ...p }: Props & { tipo: string }) {
           <path d="M8 20.5h8" />
         </Svg>
       );
+    case "tarefas":
+      return (
+        <Svg {...p}>
+          <rect x="3.5" y="4.5" width="5" height="15" rx="0.5" />
+          <rect x="9.5" y="4.5" width="5" height="10" rx="0.5" />
+          <rect x="15.5" y="4.5" width="5" height="6" rx="0.5" />
+        </Svg>
+      );
+    case "plano":
+    case "foco":
+      return (
+        <Svg {...p}>
+          <circle cx="12" cy="13" r="7.5" />
+          <path d="M12 9v4l2.5 1.5M9.5 3.5h5" />
+        </Svg>
+      );
     case "atividades":
       return (
         <Svg {...p}>
