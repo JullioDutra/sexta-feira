@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Dados pessoais e modelos baixados (nunca versionar)
+dados/
+.env
+config/rotinas_criadas.yaml
+scripts/sexta.ico
+
+# HUD
+hud/node_modules/

@@ -1,0 +1,37 @@
+# Sexta-Feira — dependências (Python 3.12 no Windows 11)
+# Versões testadas em outubro de 2026. Faixas evitam saltos de versão principal.
+
+# Servidor
+fastapi>=0.143,<1
+uvicorn[standard]>=0.54,<1
+python-multipart>=0.0.20
+httpx>=0.28,<1
+python-dotenv>=1.0,<2
+pyyaml>=6.0,<7
+cryptography>=44
+segno>=1.6,<2
+
+# Voz
+sounddevice>=0.5,<1
+vosk>=0.3.45,<0.4
+faster-whisper>=1.2,<2
+edge-tts>=7.2,<8
+pyttsx3>=2.98,<3
+av>=14
+
+# Visão
+numpy>=2.0,<3
+opencv-python>=4.10,<6
+mediapipe>=1.1,<2
+
+# Automação e sistema
+psutil>=7.0,<8
+pillow>=11
+rapidfuzz>=3.9,<4
+dateparser>=1.2,<2
+pycaw>=20240316 ; sys_platform == "win32"
+comtypes>=1.4,<2 ; sys_platform == "win32"
+pystray>=0.19,<1 ; sys_platform == "win32"
+
+# Testes (opcional): pip install pytest
+# Palavra de ativação treinada no Picovoice (opcional): pip install pvporcupine

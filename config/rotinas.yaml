@@ -1,0 +1,65 @@
+# Rotinas da Sexta-Feira
+# ---------------------------------------------------------------------------
+# Diga "Sexta-Feira, modo trabalho" (ou qualquer frase da lista) para executar.
+# Também dá para pedir por voz: "Sexta-Feira, cria uma rotina chamada modo estudo
+# que abre o Notion e toca lofi" — essas vão para rotinas_criadas.yaml.
+#
+# Ações disponíveis em cada passo:
+#   falar: "texto"            abrir: "Spotify" | "youtube" | "Downloads" | "github.com"
+#   fechar: "Chrome"          tocar_youtube: "lofi hip hop"
+#   pesquisar: "termo"        volume: 30 | "mudo"
+#   midia: tocar_pausar | proxima | anterior
+#   esperar: 2  (segundos)    clima: true      noticias: true | tecnologia | esportes ...
+#   briefing: true (saudação + clima + lembretes do dia + manchetes)
+#   lembretes: true (lê os lembretes de hoje)
+#   holograma: clima | noticias | sistema | relogio | globo | lembretes | rotinas
+#   print: true               bloquear: true (bloqueia o Windows)
+#   executar: "comando"       roda um comando do Windows (só vale neste arquivo)
+#
+# Para rodar sozinha num horário, use horario (entre aspas!) e dias:
+#   horario: "07:30"
+#   dias: [seg, ter, qua, qui, sex]     (ou: todos / uteis)
+# Depois de editar, diga "Sexta-Feira, recarrega as rotinas" (ou use o botão no HUD).
+
+rotinas:
+  modo trabalho:
+    frases: ["modo trabalho", "hora de trabalhar", "vamos trabalhar"]
+    passos:
+      - falar: "Preparando seu ambiente de trabalho."
+      - abrir: "Visual Studio Code"
+      - abrir: "gmail"
+      - volume: 30
+      - tocar_youtube: "lofi hip hop para concentrar"
+
+  modo jogo:
+    frases: ["modo jogo", "hora do jogo", "vamos jogar"]
+    passos:
+      - falar: "Modo jogo ativado. Boa partida."
+      - abrir: "Steam"
+      - abrir: "Discord"
+      - volume: 60
+
+  bom dia:
+    frases: ["bom dia", "briefing", "resumo do dia"]
+    # Descomente para tocar sozinha nos dias úteis:
+    # horario: "07:30"
+    # dias: [seg, ter, qua, qui, sex]
+    passos:
+      - briefing: true
+      - holograma: clima
+
+  boa noite:
+    frases: ["boa noite", "vou dormir"]
+    passos:
+      - falar: "Boa noite. Vou abaixar o volume e bloquear o computador."
+      - volume: 10
+      - esperar: 2
+      - bloquear: true
+
+  modo foco:
+    frases: ["modo foco", "preciso me concentrar"]
+    passos:
+      - falar: "Modo foco ativado. Fechei as distrações."
+      - fechar: "Discord"
+      - volume: 20
+      - holograma: relogio

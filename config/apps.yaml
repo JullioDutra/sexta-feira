@@ -1,0 +1,18 @@
+# Apelidos para abrir coisas por voz.
+# ---------------------------------------------------------------------------
+# A Sexta-Feira já encontra sozinha os apps do Menu Iniciar (Spotify, Steam, Discord,
+# WhatsApp, Word...) e vários sites conhecidos. Use este arquivo para os seus atalhos:
+#
+#   apps:  "como você fala": caminho do programa, comando ou URI
+#   sites: "como você fala": endereço
+#
+# Exemplos (descomente e ajuste):
+
+apps:
+  # meu jogo: "C:\\Program Files (x86)\\Steam\\steamapps\\common\\MeuJogo\\jogo.exe"
+  # projeto: "C:\\Users\\voce\\Projetos"
+  # obs: "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe"
+
+sites:
+  # campeonato: "http://localhost:5173"
+  # banco: "https://www.seubanco.com.br"

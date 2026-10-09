@@ -1,0 +1,270 @@
+@import "tailwindcss";
+@import "@fontsource-variable/big-shoulders-display";
+@import "@fontsource/chakra-petch/400.css";
+@import "@fontsource/chakra-petch/500.css";
+@import "@fontsource/chakra-petch/600.css";
+
+/*
+  Sexta-Feira — luz de fim de tarde projetada num quarto escuro.
+  Tinta: o "quarto" (azul-tinta profundo, nunca preto neutro)
+  Âmbar/Brasa: a luz dela (núcleo, bordas dos hologramas)
+  Gelo: dados e texto projetados
+  Aço: linhas e informações secundárias
+*/
+@theme {
+  --color-tinta: #06101a;
+  --color-tinta-funda: #02060b;
+  --color-ambar: #ffb547;
+  --color-brasa: #ff7a2f;
+  --color-gelo: #d8eeff;
+  --color-aco: #5f7c93;
+  --color-coral: #ff5d62;
+  --color-menta: #7cf2b8;
+  --font-display: "Big Shoulders Display Variable", "Bahnschrift", sans-serif;
+  --font-sans: "Chakra Petch", "Segoe UI", sans-serif;
+}
+
+:root {
+  --luz: #ffb547;
+  --luz-quente: #ff7a2f;
+  --luz-rgb: 255 181 71;
+  --dado: #d8eeff;
+  --linha: #5f7c93;
+  color-scheme: dark;
+}
+
+:root[data-tema="jarvis"] {
+  --luz: #57d6ff;
+  --luz-quente: #2f9bff;
+  --luz-rgb: 87 214 255;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(120% 90% at 50% 42%, #0b1a29 0%, var(--color-tinta) 45%, var(--color-tinta-funda) 100%);
+  color: var(--dado);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection {
+  background: rgb(var(--luz-rgb) / 0.35);
+}
+
+:focus-visible {
+  outline: 2px solid var(--luz);
+  outline-offset: 2px;
+}
+
+/* campos de texto mostram o foco pela linha de baixo acesa */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+.numeral {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.brilho {
+  text-shadow: 0 0 18px rgb(var(--luz-rgb) / 0.45);
+}
+
+.legivel {
+  text-shadow:
+    0 0 14px rgb(2 6 11 / 0.95),
+    0 0 4px rgb(2 6 11 / 0.9);
+}
+
+@layer components {
+/* ---------- hologramas: planos de luz projetada, não cartões ---------- */
+.holo {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform-style: preserve-3d;
+  will-change: transform;
+  touch-action: none;
+}
+
+.holo-corpo {
+  position: relative;
+  background:
+    repeating-linear-gradient(0deg, rgb(var(--luz-rgb) / 0.035) 0 1px, transparent 1px 3px),
+    linear-gradient(160deg, rgb(10 28 44 / 0.62), rgb(4 12 20 / 0.5));
+  border: 1px solid rgb(var(--luz-rgb) / 0.28);
+  box-shadow:
+    -1px 0 0 rgb(255 122 47 / 0.18),
+    1px 0 0 rgb(120 200 255 / 0.12),
+    0 0 40px rgb(var(--luz-rgb) / 0.08),
+    inset 0 0 50px rgb(var(--luz-rgb) / 0.05);
+  backdrop-filter: blur(3px);
+  border-radius: 2px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.holo[data-ativo="true"] .holo-corpo {
+  border-color: rgb(var(--luz-rgb) / 0.75);
+  box-shadow:
+    -1px 0 0 rgb(255 122 47 / 0.35),
+    1px 0 0 rgb(120 200 255 / 0.25),
+    0 0 60px rgb(var(--luz-rgb) / 0.22),
+    inset 0 0 60px rgb(var(--luz-rgb) / 0.09);
+}
+
+.holo-corpo::before,
+.holo-corpo::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--luz);
+  pointer-events: none;
+}
+.holo-corpo::before {
+  top: -2px;
+  left: -2px;
+  border-right: 0;
+  border-bottom: 0;
+}
+.holo-corpo::after {
+  bottom: -2px;
+  right: -2px;
+  border-left: 0;
+  border-top: 0;
+}
+
+.holo-flutua {
+  animation: flutuar 7s ease-in-out infinite;
+}
+
+.holo-entrada {
+  animation: projetar 0.55s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.holo-saida {
+  animation: desprojetar 0.28s ease-in both;
+}
+
+@keyframes flutuar {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -3px;
+  }
+}
+
+@keyframes projetar {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.02) scaleX(0.3);
+    filter: brightness(3);
+  }
+  35% {
+    opacity: 1;
+    transform: scaleY(0.04) scaleX(1);
+  }
+  55% {
+    opacity: 0.6;
+  }
+  62% {
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes desprojetar {
+  to {
+    opacity: 0;
+    transform: scaleY(0.02);
+    filter: brightness(2);
+  }
+}
+
+@keyframes varrer {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulsar {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes subir {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.girando {
+  animation: varrer 2.6s linear infinite;
+}
+
+.pulsando {
+  animation: pulsar 1.6s ease-in-out infinite;
+}
+
+.surgir {
+  animation: subir 0.25s ease-out both;
+}
+
+}
+
+/* barras de rolagem discretas dentro dos hologramas */
+.rolagem {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--luz-rgb) / 0.35) transparent;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo-flutua,
+  .girando,
+  .pulsando {
+    animation: none;
+  }
+  .holo-entrada,
+  .holo-saida,
+  .surgir {
+    animation-duration: 0.01s;
+  }
+}
