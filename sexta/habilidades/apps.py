@@ -186,6 +186,11 @@ class CatalogoApps:
             return False, f"{pedido} não parece estar aberto."
         return True, f"Fechando {pedido}."
 
+    def conhece_processo(self, pedido: str) -> bool:
+        """Verdadeiro se ``pedido`` é um programa conhecido ou aberto agora (usado pelos atalhos)."""
+        nome = _PREFIXOS.sub("", normalizar(pedido)).strip()
+        return bool(nome) and (nome in PROCESSOS or bool(self._procurar_processo(nome)))
+
     @staticmethod
     def _procurar_processo(nome: str) -> list[str]:
         try:

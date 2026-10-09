@@ -142,3 +142,48 @@ export function Imagem({ dados }: { dados: { url: string; legenda?: string } }) 
     </figure>
   );
 }
+
+interface Atividade {
+  ts: number;
+  ferramenta: string;
+  nivel: "livre" | "confirmada" | "rosto";
+  situacao: "ok" | "falhou" | "aguardando" | "cancelada" | "negada";
+  resumo: string;
+  canal: string;
+}
+
+const SITUACAO: Record<Atividade["situacao"], { rotulo: string; cor: string }> = {
+  ok: { rotulo: "feito", cor: "text-[var(--luz)]" },
+  falhou: { rotulo: "falhou", cor: "text-coral" },
+  aguardando: { rotulo: "aguardando", cor: "text-gelo" },
+  cancelada: { rotulo: "cancelado", cor: "text-aco" },
+  negada: { rotulo: "negado", cor: "text-coral" },
+};
+const NIVEL: Record<Atividade["nivel"], string> = { livre: "", confirmada: "confirmado por voz", rosto: "rosto + voz" };
+
+export function Atividades({ dados }: { dados: { itens?: Atividade[] } }) {
+  const itens = dados?.itens ?? [];
+  if (!itens.length)
+    return <p className="w-[360px] text-sm text-aco">Nada por aqui ainda. Tudo que eu fizer no computador aparece neste registro.</p>;
+  return (
+    <ol className="w-[400px] max-h-[400px] overflow-y-auto rolagem pr-1" aria-label="Registro de atividades">
+      {itens.map((a, i) => {
+        const s = SITUACAO[a.situacao] ?? SITUACAO.ok;
+        const hora = new Date(a.ts * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        return (
+          <li key={`${a.ts}-${i}`} className={`grid grid-cols-[46px_1fr] gap-3 py-2 ${i ? "border-t border-aco/15" : ""}`}>
+            <span className="numeral text-sm text-aco text-right pt-0.5">{hora}</span>
+            <span className="min-w-0">
+              <span className="block text-[14px] text-gelo leading-snug">{a.resumo || a.ferramenta}</span>
+              <span className="flex flex-wrap gap-x-2 text-xs mt-0.5">
+                <span className={s.cor}>{s.rotulo}</span>
+                {NIVEL[a.nivel] && <span className="text-aco">{NIVEL[a.nivel]}</span>}
+                <span className="text-aco/70">{a.canal === "celular" ? "pelo celular" : a.ferramenta}</span>
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}

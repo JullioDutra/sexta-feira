@@ -1,0 +1,31 @@
+# Terminal controlado da Sexta-Feira
+# ---------------------------------------------------------------------------
+# Comandos que ela pode rodar sozinha quando você pede ("Sexta-Feira, qual meu IP?",
+# "roda o git status"). Termine com " *" para aceitar qualquer argumento.
+# Qualquer comando fora desta lista, ou com &, |, > e afins, só roda depois de você
+# confirmar por voz E ela reconhecer seu rosto.
+#
+# pasta: onde os comandos rodam (padrão: sua pasta de usuário)
+# pasta: "C:\\Users\\voce\\Projetos"
+
+permitidos:
+  - ipconfig
+  - ipconfig /all
+  - ping *
+  - tracert *
+  - nslookup *
+  - hostname
+  - whoami
+  - systeminfo
+  - tasklist
+  - winget list
+  - winget upgrade
+  - winget search *
+  - git status
+  - git log --oneline -10
+  - python --version
+  - node --version
+  - npm --version
+  - nvidia-smi
+  - wsl --list --verbose
+  - dir *

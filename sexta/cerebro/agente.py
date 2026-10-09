@@ -1,10 +1,17 @@
 """O cérebro da Sexta-Feira: conversa com o modelo local e executa ferramentas.
 
 Fluxo de um pedido:
-1. tenta um atalho rápido (sem IA);
-2. senão, manda para o Ollama com as ferramentas disponíveis;
-3. executa as ferramentas pedidas e devolve os resultados ao modelo;
-4. a resposta final vai sendo falada frase a frase enquanto chega (streaming).
+1. se havia uma ação esperando confirmação, "sim"/"não" resolvem na hora;
+2. tenta um atalho rápido (sem IA) — cobre a maioria dos comandos do dia a dia;
+3. senão, manda para o Ollama com as ferramentas disponíveis;
+4. executa as ferramentas pedidas. Se o resultado já é a resposta (abrir, volume,
+   janelas...), fala direto, sem uma segunda ida ao modelo;
+5. senão devolve os resultados ao modelo e a resposta final vai sendo falada frase a
+   frase enquanto chega (streaming).
+
+Para ser rápido, o prompt de sistema e as ferramentas não mudam entre pedidos: o
+Ollama reaproveita o que já processou (cache) e só lê a parte nova da conversa. A
+hora e o canal vão junto da mensagem do usuário.
 """
 
 from __future__ import annotations
@@ -12,13 +19,14 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import re
 import threading
 import time
 from datetime import datetime
 from typing import Any
 
 from ..util.tempo import data_extenso, formatar_hora
-from ..util.texto import DivisorFrases
+from ..util.texto import DivisorFrases, normalizar
 from . import atalhos
 from .ferramentas import Contexto
 from .ollama import ClienteOllama, ErroOllama
@@ -32,24 +40,50 @@ PERSONA = """Você é a Sexta-Feira, a assistente pessoal de {nome}. Você roda 
 Personalidade: confiante, eficiente, leal e com um humor leve e seco, no estilo de uma IA de filme de super-herói. Trate o usuário por "{tratamento}". Fale sempre em português do Brasil.
 
 Como agir:
-- Use as ferramentas sempre que o pedido depender de dados reais (clima, notícias, lembretes, rotinas, estado do PC) ou exigir uma ação no computador. Nunca invente esses dados.
-- Depois de usar uma ferramenta, responda com o essencial do resultado — os detalhes já aparecem no holograma.
-- Para pedidos de horário em lembretes, passe o horário como o usuário falou (ex.: "amanhã às 7h", "daqui a 20 minutos").
-- Para desligar, reiniciar ou suspender o PC, confirme com o usuário antes; só chame a ferramenta com confirmado=true depois que ele confirmar.
+- Use as ferramentas sempre que o pedido depender de dados reais ou exigir uma ação no computador. Nunca invente dados.
+- Pedidos com várias ações ("fecha o Chrome e abre o Spotify"): chame todas as ferramentas de uma vez.
+- Depois de usar uma ferramenta, responda só com o essencial — os detalhes aparecem no holograma.
+- Arquivos: para achar use arquivos(acao=buscar). Para abrir direto pelo nome use arquivos(acao=abrir, alvo=<descrição>); depois de uma busca, use o número do resultado (alvo="1").
+- Área de transferência: quando o pedido falar do que foi copiado, o texto já vem junto da mensagem. Para "corrige e cola" ou "traduz e cola", chame area_transferencia(acao=colar, texto=<resultado>).
+- Tela: para "analisa a tela", "o que é esse erro?" ou "lê isso aqui" use ver(fonte=tela); para um objeto ou papel na frente da câmera, ver(fonte=camera).
+- Lembretes: passe o horário como o usuário falou ("amanhã às 7h", "daqui a 20 minutos").
+- Ações sensíveis (fechar, mover, apagar, desligar, comandos fora da lista) pedem confirmação sozinhas: apenas chame a ferramenta. Nunca diga que fez algo que ainda espera confirmação.
 - Se não souber algo ou não tiver ferramenta para isso, diga com franqueza.
 {estilo}
 
-Contexto atual:
-- Agora: {agora}
-- Cidade do usuário: {cidade}
-- Rotinas disponíveis: {rotinas}
-- Canal: {canal}
+Cidade do usuário: {cidade}
+Rotinas: {rotinas}
+Layouts de janelas: {layouts}
 
 Fatos que o usuário pediu para você lembrar:
 {memoria}"""
 
 ESTILO_VOZ = """- Esta resposta será FALADA em voz alta: seja breve (1 a 3 frases curtas), natural e direta. Não use markdown, listas, emojis nem links."""
-ESTILO_TEXTO = """- Esta resposta será lida no celular: seja objetiva (até 5 frases). Pode usar quebras de linha, mas evite markdown pesado."""
+ESTILO_TEXTO = """- Esta resposta será lida na tela: seja objetiva (até 5 frases). Pode usar quebras de linha, mas evite markdown pesado."""
+
+# pedidos que pedem o cérebro maior (quando há dois)
+_COMPLEXO = re.compile(
+    r"\b(planej|analis|explica|expliq|por que|porque|compar|escrev|redig|resum|traduz|corrig|ideia|sugest|"
+    r"cri[ae] uma rotina|o que (voce )?acha|como (eu )?(faco|posso)|me ajuda|estrategia|calcul)"
+)
+_AREA_TRANSFERENCIA = re.compile(
+    r"\b(copiei|copiado|copiada|area de transferencia|clipboard|o que (eu )?copi|texto que (eu )?copi|isso que copi)"
+)
+_SIM = re.compile(r"^(sim|s|pode|confirmo|confirma|confirmado|isso|claro|manda ver|manda|faz|faca|pode fazer|"
+                  r"pode sim|sim pode|positivo|com certeza|ok|okay|pode ir|vai|vai la|autorizo|autorizado|"
+                  r"certo|beleza|bora|uhum|aham)( sim| pode| por favor| sexta feira| confirmo)?$")
+_NAO = re.compile(r"^(nao|n|cancela|cancelar|negativo|deixa|deixa pra la|esquece|nao precisa|melhor nao|"
+                  r"nem pensar|para|pare|nao faz isso|nao pode)( nao| obrigad[oa])?$")
+
+
+def interpretar_confirmacao(texto: str) -> bool | None:
+    t = normalizar(texto)
+    t = re.sub(r"^(sexta feira |sexta )", "", t)
+    if _SIM.match(t):
+        return True
+    if _NAO.match(t):
+        return False
+    return None
 
 
 class FiltroTags:
@@ -146,6 +180,8 @@ class Agente:
             cfg.ollama_url, cfg.ollama_modelo, pensar=cfg.ollama_pensar, contexto=cfg.ollama_contexto,
             temperatura=cfg.ollama_temperatura, manter_carregado=cfg.ollama_manter_carregado,
         )
+        self.modelo_rapido = getattr(cfg, "ollama_modelo_rapido", "") or ""
+        self.max_tokens_voz = int(getattr(cfg, "ollama_max_tokens_voz", 400) or 0)
         self.historico: list[dict[str, str]] = []
         self._lock = threading.Lock()
         self._cancelar = threading.Event()
@@ -162,6 +198,15 @@ class Agente:
     def limpar_historico(self) -> None:
         self.historico.clear()
 
+    def aquecer(self) -> None:
+        """Carrega o(s) modelo(s) e já processa o prompt de sistema + ferramentas (cache do Ollama)."""
+        ctx = Contexto(self.app, canal="voz")
+        mensagens = [{"role": "system", "content": self._sistema(ctx)}, {"role": "user", "content": "oi"}]
+        ferramentas = self.app.registro.esquemas()
+        self.ollama.aquecer(mensagens, ferramentas)
+        if self.modelo_rapido and self.modelo_rapido != self.ollama.modelo:
+            self.ollama.aquecer(mensagens, ferramentas, modelo=self.modelo_rapido)
+
     def processar(self, texto: str, canal: str = "voz", cliente=None, falar: bool = True) -> dict[str, Any]:
         """Processa um pedido do usuário e devolve ``{"texto", "resultados", "id"}``."""
         texto = (texto or "").strip()
@@ -171,6 +216,7 @@ class Agente:
             return {"texto": "", "resultados": [], "id": resposta_id}
 
         with self._lock:
+            inicio = time.perf_counter()
             self._cancelar.clear()
             if time.time() - self._ultima_interacao > self.OCIOSO_REINICIA:
                 self.historico.clear()
@@ -178,11 +224,16 @@ class Agente:
             bus.publicar("conversa", papel="usuario", texto=texto, canal=canal, id=resposta_id)
             self.app.estado.definir("pensando")
             ctx = Contexto(self.app, canal=canal, cliente=cliente)
+            caminho = "ia"
             try:
-                final = None
-                if self.app.prefs.get("atalhos_rapidos"):
+                final = self._resolver_confirmacao(texto, ctx)
+                if final is not None:
+                    caminho = "confirmacao"
+                elif self.app.prefs.get("atalhos_rapidos"):
                     final = atalhos.tentar(texto, ctx)
+                    caminho = "atalho"
                 if final is None:
+                    caminho = "ia"
                     final = self._conversar(texto, ctx, resposta_id, falar)
                 else:
                     if falar and final:
@@ -202,25 +253,76 @@ class Agente:
             finally:
                 if not self.app.fala.falando_ou_na_fila():
                     self.app.estado.definir("inativa")
+            duracao = round((time.perf_counter() - inicio) * 1000)
+            log.info("Pedido resolvido por %s em %d ms", caminho, duracao)
             bus.publicar("conversa", papel="assistente", texto=final, canal=canal, id=resposta_id,
-                         ferramentas=[r["ferramenta"] for r in ctx.resultados])
-            return {"texto": final, "resultados": ctx.resultados, "id": resposta_id}
+                         ferramentas=[r["ferramenta"] for r in ctx.resultados], caminho=caminho, ms=duracao)
+            return {"texto": final, "resultados": ctx.resultados, "id": resposta_id, "caminho": caminho, "ms": duracao}
 
     # ------------------------------------------------------------------
+    def _resolver_confirmacao(self, texto: str, ctx: Contexto) -> str | None:
+        registro = self.app.registro
+        pendente = registro.pendente()
+        if pendente is None:
+            return None
+        resposta = interpretar_confirmacao(texto)
+        if resposta is None:
+            registro.cancelar_pendente()  # o usuário mudou de assunto
+            return None
+        if resposta is False:
+            registro.cancelar_pendente()
+            return "Tudo bem, cancelado."
+        resultado = registro.confirmar(ctx, self.app.verificar_para_acao)
+        return resultado.get("resumo") or "Feito."
+
+    def _escolher_modelo(self, texto: str) -> str | None:
+        """Dois cérebros: comandos curtos vão para o modelo rápido; o resto, para o principal."""
+        if not self.modelo_rapido:
+            return None
+        t = normalizar(texto)
+        if len(t.split()) > 14 or _COMPLEXO.search(t) or _AREA_TRANSFERENCIA.search(t):
+            return None
+        return self.modelo_rapido
+
+    def _mensagem_usuario(self, texto: str, ctx: Contexto) -> str:
+        agora = datetime.now()
+        canal = {"voz": "voz", "texto": "texto no HUD", "celular": "celular"}.get(ctx.canal, ctx.canal)
+        partes = [f"[{data_extenso(agora)}, {formatar_hora(agora)} · canal: {canal}]"]
+        if _AREA_TRANSFERENCIA.search(normalizar(texto)):
+            from ..habilidades import area_transferencia
+
+            try:
+                copiado = area_transferencia.ler().strip()
+            except Exception as erro:  # noqa: BLE001
+                copiado = ""
+                log.warning("Não consegui ler a área de transferência: %s", erro)
+            if copiado:
+                limite = area_transferencia.LIMITE
+                partes.append(f"<area_de_transferencia>\n{copiado[:limite]}\n</area_de_transferencia>")
+            else:
+                partes.append("(a área de transferência está vazia ou não tem texto)")
+        partes.append(texto)
+        return "\n".join(partes)
+
     def _conversar(self, texto: str, ctx: Contexto, resposta_id: int, falar: bool) -> str:
         bus = self.app.barramento
         mensagens: list[dict[str, Any]] = [{"role": "system", "content": self._sistema(ctx)}]
         mensagens += self.historico[-self.HISTORICO_MAX:]
-        mensagens.append({"role": "user", "content": texto})
+        mensagens.append({"role": "user", "content": self._mensagem_usuario(texto, ctx)})
         saida = SaidaFala(self.app.fala) if falar else None
         texto_final = ""
+        direto = False
         assinaturas: set[str] = set()
+        modelo = self._escolher_modelo(texto)
+        max_tokens = self.max_tokens_voz if ctx.canal == "voz" else None
+        ferramentas = self.app.registro.esquemas()
 
         for _rodada in range(self.MAX_RODADAS):
             filtro = FiltroTags()
             partes: list[str] = []
             chamadas: list[dict[str, Any]] = []
-            for evento in self.ollama.conversar(mensagens, self.app.registro.esquemas(), self._cancelar.is_set):
+            for evento in self.ollama.conversar(mensagens, ferramentas, self._cancelar.is_set,
+                                                modelo=modelo, max_tokens=max_tokens):
                 if evento["tipo"] == "texto":
                     visivel = filtro.alimentar(evento["texto"])
                     if visivel:
@@ -249,6 +351,7 @@ class Agente:
                 "tool_calls": [{"function": {"name": c["nome"], "arguments": c["argumentos"]}} for c in chamadas],
             })
             repetida = False
+            resultados_rodada = []
             for chamada in chamadas:
                 assinatura = chamada["nome"] + json.dumps(chamada["argumentos"], sort_keys=True, ensure_ascii=False)
                 repetida = repetida or assinatura in assinaturas
@@ -256,13 +359,25 @@ class Agente:
                 bus.publicar("ferramenta", nome=chamada["nome"], argumentos=chamada["argumentos"], id=resposta_id)
                 log.info("Ferramenta: %s %s", chamada["nome"], chamada["argumentos"])
                 resultado = self.app.registro.executar(chamada["nome"], chamada["argumentos"], ctx)
+                resultados_rodada.append(resultado)
                 conteudo = {k: v for k, v in resultado.items() if not k.startswith("_")}
                 mensagens.append({"role": "tool", "tool_name": chamada["nome"],
                                   "content": json.dumps(conteudo, ensure_ascii=False, default=str)})
+            if resultados_rodada and all(r.get("_direta") for r in resultados_rodada):
+                # o resultado já é a resposta: fala direto, sem outra ida ao modelo
+                direto = True
+                texto_final = " ".join(r["resumo"].strip() for r in resultados_rodada if r.get("resumo", "").strip())
+                if saida and texto_final:
+                    saida.alimentar(" " + texto_final + " ")
+                if texto_rodada and texto_final:
+                    texto_final = f"{texto_rodada} {texto_final}"
+                elif texto_rodada:
+                    texto_final = texto_rodada
+                break
             if repetida:
                 break
 
-        if not texto_final:
+        if not texto_final and not direto:
             resumos = [r["resumo"] for r in ctx.resultados if r.get("resumo")]
             texto_final = " ".join(resumos[-2:]) if resumos else ("Cancelado." if self._cancelar.is_set() else "Pronto.")
             if saida and not saida.falou:
@@ -278,18 +393,17 @@ class Agente:
         self.historico = self.historico[-self.HISTORICO_MAX:]
 
     def _sistema(self, ctx: Contexto) -> str:
+        """Prompt de sistema estável (sem hora): permite o cache de prompt do Ollama."""
         prefs = self.app.prefs
-        agora = datetime.now()
         nome = prefs.get("nome") or "seu usuário"
         rotinas = ", ".join(r.nome for r in self.app.rotinas.listar()) or "nenhuma"
-        canal = {"voz": "voz (microfone do PC)", "texto": "texto no HUD do PC", "celular": "celular"}.get(ctx.canal, ctx.canal)
+        layouts = getattr(self.app, "layouts", None)
         return PERSONA.format(
             nome=nome,
             tratamento=prefs.get("tratamento") or "chefe",
             estilo=ESTILO_VOZ if ctx.canal == "voz" else ESTILO_TEXTO,
-            agora=f"{data_extenso(agora)}, {formatar_hora(agora)}",
             cidade=prefs.get("cidade_rotulo") or prefs.get("cidade") or "não definida (pergunte se precisar)",
             rotinas=rotinas,
-            canal=canal,
+            layouts=", ".join(layouts.nomes()) if layouts else "nenhum",
             memoria=self.app.memoria.para_prompt(),
         )

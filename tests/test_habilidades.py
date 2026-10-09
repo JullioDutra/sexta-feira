@@ -134,10 +134,10 @@ def test_executar_rotina_em_sequencia(app, monkeypatch):
     monkeypatch.setattr(app.apps, "abrir", lambda alvo: (abertos.append(alvo), (True, "ok"))[1])
     monkeypatch.setattr("sexta.habilidades.windows.definir_volume", lambda v: v)
     monkeypatch.setattr("sexta.habilidades.web.tocar_youtube", lambda b: (True, "ok"))
-    rotina = app.rotinas.obter("modo trabalho")
+    rotina = app.rotinas.obter("modo jogo")
     app.rotinas._executar(rotina, app.contexto())
-    assert abertos == ["Visual Studio Code", "gmail"]
-    assert app.fala.falas[0] == "Preparando seu ambiente de trabalho."
+    assert abertos == ["Steam", "Discord"]
+    assert app.fala.falas[0] == "Modo jogo ativado. Boa partida."
 
 
 def test_apps_resolver(app):
@@ -164,7 +164,8 @@ def test_hologramas_unicos_e_texto(app):
 
 def test_desligar_exige_confirmacao(app):
     r = app.registro.executar("computador", {"acao": "desligar"}, app.contexto())
-    assert not r["ok"] and "confirma" in r["resumo"]
+    assert not r["ok"] and r["pendente"] and r["resumo"].startswith("Confirma: desligar o computador?")
+    assert app.registro.pendente().nome == "computador"
 
 
 def test_memoria(app):

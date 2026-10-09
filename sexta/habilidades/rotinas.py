@@ -10,7 +10,7 @@ import logging
 import subprocess
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -25,7 +25,9 @@ DIAS = {"seg": 0, "segunda": 0, "ter": 1, "terca": 1, "qua": 2, "quarta": 2, "qu
         "sex": 4, "sexta": 4, "sab": 5, "sabado": 5, "dom": 6, "domingo": 6}
 # Ações que a IA pode usar ao criar rotinas (sem "executar", que roda comandos do sistema)
 ACOES_SEGURAS = ["falar", "abrir", "fechar", "tocar_youtube", "pesquisar", "volume", "midia", "esperar",
-                 "clima", "noticias", "briefing", "lembretes", "holograma", "print", "bloquear"]
+                 "clima", "noticias", "briefing", "lembretes", "holograma", "print", "bloquear",
+                 "layout", "minimizar_tudo", "plano_energia", "nao_perturbe", "modo_escuro", "organizar_downloads",
+                 "brilho"]
 ACOES = ACOES_SEGURAS + ["executar"]
 
 
@@ -181,6 +183,8 @@ class Rotinas:
     def _executar(self, rotina: Rotina, ctx) -> None:
         app = self.app
         log.info("Executando rotina: %s", rotina.nome)
+        # a rotina foi escrita (ou aprovada) pelo usuário: os passos não pedem confirmação de novo
+        ctx = replace(ctx, confiavel=True, resultados=[])
         total = len(rotina.passos)
         for i, passo in enumerate(rotina.passos, start=1):
             acao, valor = next(iter(passo.items()))
@@ -230,6 +234,19 @@ class Rotinas:
         elif acao == "bloquear":
             app.fala.aguardar(15)
             executar("computador", {"acao": "bloquear"}, ctx)
+        elif acao == "layout":
+            executar("janelas", {"acao": "aplicar_layout", "app": str(valor)}, ctx)
+        elif acao == "minimizar_tudo":
+            executar("janelas", {"acao": "minimizar_tudo"}, ctx)
+        elif acao == "plano_energia":
+            executar("configuracao", {"item": "plano_energia", "valor": str(valor)}, ctx)
+        elif acao in ("nao_perturbe", "modo_escuro"):
+            ligar = str(valor).lower() not in ("false", "nao", "não", "desligar", "0")
+            executar("configuracao", {"item": acao, "valor": "ligar" if ligar else "desligar"}, ctx)
+        elif acao == "brilho":
+            executar("configuracao", {"item": "brilho", "valor": str(valor)}, ctx)
+        elif acao == "organizar_downloads":
+            executar("arquivos", {"acao": "organizar_downloads", "por_data": str(valor).lower() == "data"}, ctx)
         elif acao == "executar":
             subprocess.Popen(str(valor), shell=True)  # noqa: S602 - só vale em rotinas escritas à mão no YAML
         if acao in ("falar", "clima", "noticias", "lembretes", "briefing"):

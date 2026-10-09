@@ -67,10 +67,16 @@ class Config:
     # Cérebro (Ollama)
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_modelo: str = "qwen3.5:9b"
+    ollama_modelo_rapido: str = ""   # opcional: modelo menor só para comandos curtos ("dois cérebros")
+    ollama_modelo_visao: str = ""    # modelo com visão para "analisa a tela" (padrão: o principal)
     ollama_pensar: bool = False
     ollama_contexto: int = 8192
-    ollama_temperatura: float = 0.6
-    ollama_manter_carregado: str = "30m"
+    ollama_temperatura: float = 0.5
+    ollama_manter_carregado: str = "4h"  # quanto tempo o modelo fica na memória sem uso (evita recarregar)
+    ollama_max_tokens_voz: int = 400
+
+    # Arquivos
+    pastas_arquivos: list[str] = field(default_factory=list)  # pastas extras para a busca de arquivos
 
     # Servidor
     porta: int = 8765
@@ -130,10 +136,14 @@ class Config:
         cfg = cls(
             ollama_url=_env_str("OLLAMA_URL", cls.ollama_url).rstrip("/"),
             ollama_modelo=_env_str("OLLAMA_MODELO", cls.ollama_modelo),
+            ollama_modelo_rapido=_env_str("OLLAMA_MODELO_RAPIDO"),
+            ollama_modelo_visao=_env_str("OLLAMA_MODELO_VISAO"),
             ollama_pensar=_env_bool("OLLAMA_PENSAR", cls.ollama_pensar),
             ollama_contexto=_env_int("OLLAMA_CONTEXTO", cls.ollama_contexto),
             ollama_temperatura=_env_float("OLLAMA_TEMPERATURA", cls.ollama_temperatura),
             ollama_manter_carregado=_env_str("OLLAMA_MANTER_CARREGADO", cls.ollama_manter_carregado),
+            ollama_max_tokens_voz=_env_int("OLLAMA_MAX_TOKENS_VOZ", cls.ollama_max_tokens_voz),
+            pastas_arquivos=_env_lista("PASTAS_ARQUIVOS"),
             porta=_env_int("PORTA", cls.porta),
             porta_https=_env_int("PORTA_CELULAR", cls.porta_https),
             liberar_rede=_env_bool("LIBERAR_CELULAR", cls.liberar_rede),

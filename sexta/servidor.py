@@ -414,6 +414,8 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
     def recarregar_rotinas(_: Cliente = Depends(so_pc)):
         app.rotinas.recarregar()
         app.apps.recarregar()
+        app.layouts.recarregar()
+        app.terminal.recarregar()
         return [r.para_dict() for r in app.rotinas.listar()]
 
     @api.get("/api/prints/{nome}")

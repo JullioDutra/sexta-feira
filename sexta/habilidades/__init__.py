@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from ..cerebro.ferramentas import P, Registro
+from ..cerebro.ferramentas import CONFIRMAR, LIVRE, ROSTO, P, Registro
 from ..util.tempo import interpretar_quando
 from . import sistema_info, web, windows
 from .clima import ErroClima, ServicoClima
@@ -17,6 +17,15 @@ from .rotinas import ACOES_SEGURAS
 log = logging.getLogger(__name__)
 
 TEXTO_REPETICAO = {"diario": " todos os dias", "dias_uteis": " nos dias úteis", "semanal": " toda semana"}
+
+
+def _nivel_computador(args: dict) -> int:
+    return ROSTO if args.get("acao") in ("desligar", "reiniciar") else CONFIRMAR if args.get("acao") == "suspender" else LIVRE
+
+
+def _descrever_computador(args: dict) -> str:
+    return {"desligar": "desligar o computador", "reiniciar": "reiniciar o computador",
+            "suspender": "suspender o computador"}.get(args.get("acao", ""), "essa ação no computador")
 
 
 def registrar_ferramentas(app, registro: Registro) -> None:
@@ -91,6 +100,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "abrir",
         "Abre um programa, site, pasta ou endereço no computador. Ex.: 'Spotify', 'YouTube', 'Downloads', 'github.com'.",
+        direta=True,
         alvo=P("string", "O que abrir, do jeito que o usuário falou.", obrigatorio=True),
     )
     def abrir(ctx, alvo: str):
@@ -100,6 +110,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "fechar_programa",
         "Fecha um programa aberto (como clicar no X; o programa pode pedir para salvar).",
+        direta=True, nivel=CONFIRMAR, descrever=lambda a: f"fechar {a.get('nome', 'o programa')}",
         nome=P("string", "Nome do programa, ex.: 'Chrome', 'Spotify'.", obrigatorio=True),
     )
     def fechar_programa(ctx, nome: str):
@@ -109,6 +120,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "pesquisar",
         "Pesquisa algo na internet abrindo o navegador no Google, YouTube, Maps ou Imagens.",
+        direta=True,
         termo=P("string", "O que pesquisar.", obrigatorio=True),
         onde=P("string", "Onde pesquisar (padrão google).", enum=list(web.BUSCAS)),
     )
@@ -119,6 +131,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "tocar_youtube",
         "Toca uma música ou vídeo no YouTube (abre o primeiro resultado da busca no navegador).",
+        direta=True,
         busca=P("string", "Música, artista ou vídeo.", obrigatorio=True),
     )
     def tocar_youtube(ctx, busca: str):
@@ -129,6 +142,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "controlar_midia",
         "Controla o que está tocando no PC (Spotify, YouTube, player): tocar/pausar, próxima, anterior, parar.",
+        direta=True,
         acao=P("string", "Ação.", enum=["tocar_pausar", "proxima", "anterior", "parar"], obrigatorio=True),
     )
     def controlar_midia(ctx, acao: str):
@@ -142,6 +156,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "ajustar_volume",
         "Ajusta ou consulta o volume do computador.",
+        direta=True,
         acao=P("string", "O que fazer.", enum=["definir", "aumentar", "diminuir", "mudo", "tirar_mudo", "consultar"],
                obrigatorio=True),
         valor=P("integer", "Porcentagem 0-100 para 'definir'; para aumentar/diminuir, quantos pontos (padrão 10)."),
@@ -172,11 +187,11 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         "computador",
         "Ações no PC: tirar print da tela, bloquear a tela, desligar, reiniciar, suspender, cancelar um desligamento "
         "agendado, ou ver o status (CPU, memória, disco, bateria).",
+        direta=True, nivel=_nivel_computador, descrever=_descrever_computador,
         acao=P("string", "Ação.", enum=["print", "bloquear", "desligar", "reiniciar", "suspender",
                                         "cancelar_desligamento", "status"], obrigatorio=True),
-        confirmado=P("boolean", "Para desligar/reiniciar/suspender: true SOMENTE depois que o usuário confirmar."),
     )
-    def computador(ctx, acao: str, confirmado: bool = False):
+    def computador(ctx, acao: str):
         try:
             if acao == "print":
                 arquivo = windows.print_da_tela(app.pasta_prints())
@@ -188,8 +203,6 @@ def registrar_ferramentas(app, registro: Registro) -> None:
                 app.sessao.bloquear("windows")
                 return {"ok": True, "resumo": "Tela bloqueada."}
             if acao in ("desligar", "reiniciar", "suspender"):
-                if not confirmado:
-                    return {"ok": False, "resumo": f"Antes de {acao}, pergunte ao usuário se ele confirma."}
                 windows.energia(acao)
                 if acao == "suspender":
                     return {"ok": True, "resumo": "Suspendendo o computador."}
@@ -207,6 +220,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "criar_lembrete",
         "Cria um lembrete ou alarme. Para timers ('me avisa em 10 minutos') use quando='daqui a 10 minutos'.",
+        direta=True,
         texto=P("string", "Do que lembrar, ex.: 'ligar para o João'.", obrigatorio=True),
         quando=P("string", "Quando, do jeito que o usuário falou: 'amanhã às 7h', 'daqui a 20 minutos', "
                            "'sexta às 18:30'.", obrigatorio=True),
@@ -232,6 +246,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "gerenciar_lembretes",
         "Lista os lembretes (todos ou só os de hoje), cancela lembretes, ou desliga um alarme que está tocando.",
+        direta=True,
         acao=P("string", "Ação.", enum=["listar", "hoje", "cancelar", "cancelar_todos", "parar_alarme"], obrigatorio=True),
         alvo=P("string", "Para cancelar: parte do texto do lembrete ou o número dele."),
     )
@@ -263,8 +278,9 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     # ------------------------------------------------------------------ rotinas
     @ferramenta(
         "rotina",
-        "Executa, lista, apaga ou recarrega (depois de editar o arquivo) as rotinas — sequências de ações como "
+        "Executa, lista, apaga ou recarrega (depois de editar os arquivos de rotinas, layouts, terminal) as rotinas — sequências de ações como "
         "'modo trabalho' ou 'modo jogo'.",
+        direta=True,
         acao=P("string", "Ação.", enum=["executar", "listar", "apagar", "recarregar"], obrigatorio=True),
         nome=P("string", "Nome da rotina."),
     )
@@ -273,6 +289,8 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         if acao == "recarregar":
             rotinas.recarregar()
             app.apps.recarregar()
+            app.layouts.recarregar()
+            app.terminal.recarregar()
             return {"ok": True, "resumo": f"Rotinas recarregadas: {len(rotinas.listar())} no total."}
         if acao == "listar":
             itens = rotinas.listar()
@@ -302,6 +320,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         "fechar (programa), tocar_youtube (busca), pesquisar (termo), volume (0-100 ou 'mudo'), midia "
         "(tocar_pausar/proxima/anterior), esperar (segundos), clima, noticias, briefing, lembretes, holograma (tipo), "
         "print, bloquear.",
+        direta=True,
         nome=P("string", "Nome curto, ex.: 'modo estudo'.", obrigatorio=True),
         passos=P("array", "Passos em ordem.", obrigatorio=True, itens={
             "type": "object",
@@ -326,7 +345,8 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "holograma",
         "Mostra ou fecha hologramas no HUD. Tipos: clima, noticias, sistema, relogio, globo, lembretes, rotinas, camera, "
-        "texto (anotação/lista que o usuário pedir para exibir).",
+        "atividades (registro do que a Sexta fez no PC), texto (anotação/lista que o usuário pedir para exibir).",
+        direta=True,
         acao=P("string", "Ação.", enum=["mostrar", "fechar", "fechar_todos"], obrigatorio=True),
         tipo=P("string", "Tipo do holograma.", enum=TIPOS_HOLOGRAMA),
         titulo=P("string", "Título (opcional)."),
@@ -360,6 +380,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         "memoria",
         "Guarda, esquece ou lista fatos sobre o usuário para lembrar em conversas futuras "
         "(ex.: time do coração, nome da namorada, preferências).",
+        direta=True,
         acao=P("string", "Ação.", enum=["lembrar", "esquecer", "listar"], obrigatorio=True),
         fato=P("string", "O fato, em uma frase curta na terceira pessoa. Ex.: 'O time dele é o Cruzeiro'."),
     )
@@ -380,6 +401,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         "assistente",
         "Controla a própria Sexta-Feira: bloquear (modo privado: só obedece depois de reconhecer o rosto), "
         "silenciar o microfone, ligar ou desligar o controle dos hologramas pelas mãos.",
+        direta=True,
         acao=P("string", "Ação.", enum=["bloquear", "silenciar_microfone", "ligar_maos", "desligar_maos"], obrigatorio=True),
     )
     def assistente(ctx, acao: str):
@@ -397,3 +419,341 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         app.maos_para_hud(ligar)
         return {"ok": True, "resumo": "Controle por gestos ligado. Faça uma pinça para pegar um holograma." if ligar
                 else "Controle por gestos desligado."}
+
+    registrar_ferramentas_pc(app, registro)
+
+
+# ---------------------------------------------------------------------------
+# Fase 1: acesso às ferramentas do computador
+# ---------------------------------------------------------------------------
+
+def _nivel_arquivos(args: dict) -> int:
+    return {"apagar": ROSTO, "mover": CONFIRMAR, "renomear": CONFIRMAR, "organizar_downloads": CONFIRMAR}.get(
+        args.get("acao", ""), LIVRE)
+
+
+def _descrever_arquivos(args: dict) -> str:
+    acao, alvo = args.get("acao", ""), args.get("alvo") or "o arquivo"
+    alvo = f"o item {alvo} da busca" if str(alvo).strip().isdigit() else alvo
+    return {"apagar": f"mandar {alvo} para a Lixeira", "mover": f"mover {alvo} para {args.get('destino', '?')}",
+            "renomear": f"renomear {alvo} para {args.get('destino', '?')}",
+            "organizar_downloads": "organizar a pasta Downloads em pastas por tipo"
+            + (" e mês" if args.get("por_data") else "")}.get(acao, acao)
+
+
+def _nivel_janelas(args: dict) -> int:
+    return CONFIRMAR if args.get("acao") == "fechar" else LIVRE
+
+
+def _nivel_processos(args: dict) -> int:
+    return CONFIRMAR if args.get("acao") in ("encerrar", "fechar_travados") else LIVRE
+
+
+def _descrever_processos(args: dict) -> str:
+    if args.get("acao") == "fechar_travados":
+        return "fechar à força os programas que não estão respondendo"
+    return f"encerrar à força {args.get('nome') or 'o programa'} (o que não foi salvo se perde)"
+
+
+def registrar_ferramentas_pc(app, registro: Registro) -> None:
+    from . import area_transferencia, configuracoes, janelas, processos, visao
+    from .arquivos import ErroArquivos
+    from .configuracoes import ErroConfiguracao
+
+    ferramenta = registro.ferramenta
+
+    # ------------------------------------------------------------------ arquivos
+    @ferramenta(
+        "arquivos",
+        "Arquivos do usuário: buscar (por nome, tipo e data: 'pdf do contrato de março'), abrir, mostrar_na_pasta, "
+        "recentes, mover, renomear, apagar (vai para a Lixeira) e organizar_downloads (separa por tipo).",
+        direta=True, nivel=_nivel_arquivos, descrever=_descrever_arquivos,
+        acao=P("string", "Ação.", enum=["buscar", "abrir", "mostrar_na_pasta", "recentes", "mover", "renomear",
+                                        "apagar", "organizar_downloads"], obrigatorio=True),
+        alvo=P("string", "Para buscar: o que procurar, do jeito que o usuário falou. Para as outras ações: o número "
+                         "do resultado da última busca ('1', '2'...), um caminho ou um nome."),
+        tipo=P("string", "Filtro de tipo opcional: pdf, documento, planilha, apresentacao, imagem, video, musica, "
+                         "compactado, instalador, codigo, modelo 3d."),
+        destino=P("string", "Para mover: pasta de destino (ex.: 'Documentos', 'Projetos'). Para renomear: o nome novo."),
+        por_data=P("boolean", "Para organizar_downloads: também separar por mês."),
+    )
+    def arquivos(ctx, acao: str, alvo: str | None = None, tipo: str | None = None, destino: str | None = None,
+                 por_data: bool = False):
+        arq = app.arquivos
+        try:
+            if acao in ("buscar", "recentes"):
+                achados = arq.recentes(tipo=tipo) if acao == "recentes" else arq.buscar(alvo or "", tipo)
+                if not achados:
+                    return {"ok": False, "resumo": "Não encontrei nenhum arquivo assim.", "_direta": False}
+                itens = [a.para_dict() for a in achados]
+                linhas = [f"{i}. {d['nome']} ({d['modificado']})" for i, d in enumerate(itens, 1)]
+                app.hologramas.mostrar("texto", {"texto": "\n".join(linhas + ["", "Diga: abre o 1, mostra o 2 na pasta..."])},
+                                       titulo="Arquivos recentes" if acao == "recentes" else f"Busca: {alvo or tipo}")
+                if len(itens) == 1:
+                    resumo = f"Achei {itens[0]['nome']}, de {itens[0]['modificado'][:10]}. Quer que eu abra?"
+                else:
+                    resumo = f"Achei {len(itens)} arquivos. O primeiro é {itens[0]['nome']}. Estão na tela."
+                return {"ok": True, "resumo": resumo, "arquivos": itens}
+            if acao == "organizar_downloads":
+                contagem = arq.organizar_downloads(bool(por_data))
+                if not contagem:
+                    return {"ok": True, "resumo": "A pasta Downloads já está organizada."}
+                total = sum(contagem.values())
+                partes = ", ".join(f"{n} em {g}" for g, n in sorted(contagem.items(), key=lambda x: -x[1])[:4])
+                return {"ok": True, "resumo": f"Organizei {total} arquivos: {partes}."}
+            if not alvo:
+                return {"ok": False, "resumo": "Qual arquivo?"}
+            if acao == "abrir":
+                caminho = arq.abrir(alvo)
+                return {"ok": True, "resumo": f"Abrindo {caminho.name}."}
+            if acao == "mostrar_na_pasta":
+                caminho = arq.mostrar_na_pasta(alvo)
+                return {"ok": True, "resumo": f"Mostrando {caminho.name} na pasta."}
+            if acao == "mover":
+                if not destino:
+                    return {"ok": False, "resumo": "Para qual pasta?"}
+                final = arq.mover(alvo, destino)
+                return {"ok": True, "resumo": f"Movi {final.name} para {final.parent.name}."}
+            if acao == "renomear":
+                if not destino:
+                    return {"ok": False, "resumo": "Qual o nome novo?"}
+                final = arq.renomear(alvo, destino)
+                return {"ok": True, "resumo": f"Renomeado para {final.name}."}
+            caminho = arq.apagar(alvo)
+            return {"ok": True, "resumo": f"{caminho.name} foi para a Lixeira."}
+        except (ErroArquivos, OSError, windows.NaoSuportado) as erro:
+            return {"ok": False, "resumo": str(erro)}
+
+    # ------------------------------------------------------------------ área de transferência
+    @ferramenta(
+        "area_transferencia",
+        "Lê o texto copiado pelo usuário, ou coloca um texto na área de transferência e cola na janela em foco "
+        "(para 'corrige e cola', 'traduz e cola').",
+        acao=P("string", "Ação.", enum=["ler", "copiar", "colar"], obrigatorio=True),
+        texto=P("string", "Para copiar/colar: o texto final."),
+    )
+    def area_transf(ctx, acao: str, texto: str | None = None):
+        try:
+            if acao == "ler":
+                copiado = area_transferencia.ler().strip()
+                if not copiado:
+                    return {"ok": False, "resumo": "A área de transferência está vazia (ou tem uma imagem)."}
+                return {"ok": True, "resumo": "Texto copiado lido.", "texto": copiado[:area_transferencia.LIMITE]}
+            if not texto:
+                return {"ok": False, "resumo": "Qual texto?"}
+            area_transferencia.escrever(texto)
+            if acao == "colar":
+                area_transferencia.colar()
+                return {"ok": True, "resumo": "Pronto, colei.", "_direta": True}
+            return {"ok": True, "resumo": "Copiado.", "_direta": True}
+        except (area_transferencia.ErroAreaTransferencia, OSError, windows.NaoSuportado) as erro:
+            return {"ok": False, "resumo": str(erro)}
+
+    # ------------------------------------------------------------------ janelas
+    @ferramenta(
+        "janelas",
+        "Controla as janelas abertas: focar, minimizar, maximizar, restaurar, fechar, encaixar (esquerda/direita/...), "
+        "mover_monitor (manda para o outro monitor), minimizar_tudo, listar, aplicar_layout e salvar_layout "
+        "(ex.: 'modo trabalho' com VS Code à esquerda e navegador à direita).",
+        direta=True, nivel=_nivel_janelas, descrever=lambda a: f"fechar a janela de {a.get('app', '?')}",
+        acao=P("string", "Ação.", enum=["focar", "minimizar", "maximizar", "restaurar", "fechar", "encaixar",
+                                        "mover_monitor", "minimizar_tudo", "listar", "aplicar_layout", "salvar_layout"],
+               obrigatorio=True),
+        app=P("string", "Programa ou janela, ex.: 'VS Code', 'navegador', 'Spotify'. Para layouts: o nome do layout."),
+        posicao=P("string", "Para encaixar.", enum=janelas.POSICOES),
+        monitor=P("integer", "Número do monitor (1 = o mais à esquerda). Opcional."),
+    )
+    def ferramenta_janelas(ctx, acao: str, app: str | None = None, posicao: str | None = None,
+                           monitor: int | None = None):
+        sexta = ctx.app
+        indice = monitor - 1 if monitor else None
+        try:
+            if acao == "minimizar_tudo":
+                janelas.minimizar_tudo()
+                return {"ok": True, "resumo": "Tudo minimizado."}
+            if acao == "listar":
+                lista = [j for j in janelas.listar() if not j.titulo.startswith("Sexta-Feira")][:12]
+                if not lista:
+                    return {"ok": True, "resumo": "Nenhuma janela aberta."}
+                nomes = ", ".join(dict.fromkeys(j.exe for j in lista))
+                return {"ok": True, "resumo": f"Abertos agora: {nomes}.", "janelas": [j.rotulo() for j in lista],
+                        "_direta": False}
+            if acao == "aplicar_layout":
+                if not app:
+                    return {"ok": False, "resumo": "Qual layout?"}
+                feitos = sexta.layouts.aplicar(app)
+                return {"ok": bool(feitos), "resumo": f"Layout {app} pronto." if feitos else "Não achei as janelas do layout."}
+            if acao == "salvar_layout":
+                if not app:
+                    return {"ok": False, "resumo": "Com que nome salvo o layout?"}
+                apps_salvos = sexta.layouts.salvar_atual(app)
+                return {"ok": True, "resumo": f"Layout {app} salvo com {len(apps_salvos)} janelas. Diga 'layout {app}' para voltar a ele."}
+            if not app:
+                return {"ok": False, "resumo": "Qual janela?"}
+            janela = janelas.exigir(app)
+            if acao == "focar":
+                janelas.focar(janela)
+                return {"ok": True, "resumo": f"{janela.exe.capitalize()} em foco."}
+            if acao == "minimizar":
+                janelas.mostrar(janela, janelas.SW_MINIMIZE)
+                return {"ok": True, "resumo": "Minimizado."}
+            if acao == "maximizar":
+                janelas.mostrar(janela, janelas.SW_MAXIMIZE)
+                return {"ok": True, "resumo": "Maximizado."}
+            if acao == "restaurar":
+                janelas.mostrar(janela, janelas.SW_RESTORE)
+                return {"ok": True, "resumo": "Restaurado."}
+            if acao == "fechar":
+                janelas.fechar(janela)
+                return {"ok": True, "resumo": f"Fechando a janela de {janela.exe}."}
+            if acao == "encaixar":
+                janelas.encaixar(janela, posicao or "esquerda", indice)
+                janelas.focar(janela)
+                return {"ok": True, "resumo": "Encaixado."}
+            destino = janelas.mover_para_monitor(janela, indice)
+            return {"ok": True, "resumo": f"Mandei para o monitor {destino + 1}."}
+        except (janelas.ErroJanelas, windows.NaoSuportado, OSError) as erro:
+            return {"ok": False, "resumo": str(erro)}
+
+    # ------------------------------------------------------------------ visão
+    @ferramenta(
+        "ver",
+        "Olha a tela do PC (print) ou a webcam e responde sobre o que aparece: explicar um erro, ler uma planilha, "
+        "resumir um site, identificar um objeto ou ler um papel mostrado à câmera.",
+        direta=True,
+        fonte=P("string", "De onde olhar.", enum=["tela", "camera"], obrigatorio=True),
+        pergunta=P("string", "O que o usuário quer saber, com as palavras dele.", obrigatorio=True),
+    )
+    def ver(ctx, fonte: str, pergunta: str):
+        sexta = ctx.app
+        sexta.barramento.publicar("aviso", nivel="info", texto="Analisando a tela…" if fonte == "tela" else "Olhando pela câmera…")
+        try:
+            imagem = visao.capturar_camera(sexta) if fonte == "camera" else visao.capturar_tela()
+            b64 = visao.para_base64(imagem)
+        except Exception as erro:  # noqa: BLE001
+            return {"ok": False, "resumo": f"Não consegui capturar a {'câmera' if fonte == 'camera' else 'tela'}: {erro}"}
+        modelo = sexta.cfg.ollama_modelo_visao or None
+        resposta = sexta.agente.ollama.visao(pergunta, [b64], visao.instrucao(fonte, ctx.canal), modelo=modelo)
+        if fonte == "tela" and ctx.canal != "voz":
+            sexta.hologramas.mostrar("texto", {"texto": resposta}, titulo="Análise da tela")
+        return {"ok": bool(resposta), "resumo": resposta or "Não consegui entender a imagem."}
+
+    # ------------------------------------------------------------------ processos
+    @ferramenta(
+        "processos",
+        "Mostra o que está pesando no PC (por CPU, memória RAM ou placa de vídeo), lista programas travados, "
+        "fecha os travados ou encerra um programa à força.",
+        direta=True, nivel=_nivel_processos, descrever=_descrever_processos,
+        acao=P("string", "Ação.", enum=["mais_pesados", "travados", "fechar_travados", "encerrar"], obrigatorio=True),
+        ordem=P("string", "Para mais_pesados: ordenar por.", enum=["cpu", "ram", "gpu"]),
+        nome=P("string", "Para encerrar: o programa."),
+    )
+    def ferramenta_processos(ctx, acao: str, ordem: str = "cpu", nome: str | None = None):
+        if acao == "mais_pesados":
+            linhas = processos.top(ordem or "cpu")
+            tabela = "\n".join(
+                f"{l['nome']:<22} CPU {l['cpu']:>5.1f}%   RAM {processos._mb(l['ram_mb']):>8}"
+                + (f"   GPU {l['gpu']:.0f}%" if l.get("gpu") is not None else "") for l in linhas)
+            ctx.app.hologramas.mostrar("texto", {"texto": tabela}, titulo="Processos")
+            return {"ok": True, "resumo": processos.descrever(linhas, ordem or "cpu"), "processos": linhas}
+        if acao == "travados":
+            lista = processos.travados()
+            if not lista:
+                return {"ok": True, "resumo": "Nenhum programa travado."}
+            return {"ok": True, "resumo": "Não estão respondendo: " + ", ".join(t["nome"] for t in lista) + "."}
+        if acao == "fechar_travados":
+            fechados = processos.fechar_travados()
+            return {"ok": True, "resumo": ("Fechei: " + ", ".join(fechados) + ".") if fechados else "Nenhum programa travado."}
+        if not nome:
+            return {"ok": False, "resumo": "Qual programa?"}
+        quantos, _ = processos.encerrar(nome)
+        return {"ok": bool(quantos), "resumo": f"{nome} encerrado." if quantos else f"Não achei {nome} rodando (ou é protegido)."}
+
+    # ------------------------------------------------------------------ configurações
+    @ferramenta(
+        "configuracao",
+        "Ajusta o Windows: brilho (0-100, mais, menos), wifi e bluetooth (ligar/desligar), modo_escuro, "
+        "plano_energia (economia, equilibrado, alto desempenho, desempenho maximo), nao_perturbe e saida_audio "
+        "(trocar entre fone, caixas, monitor...).",
+        direta=True,
+        item=P("string", "O que ajustar.", enum=["brilho", "wifi", "bluetooth", "modo_escuro", "plano_energia",
+                                                  "nao_perturbe", "saida_audio"], obrigatorio=True),
+        valor=P("string", "Brilho: número, 'mais' ou 'menos'. Wifi/bluetooth/modo_escuro/nao_perturbe: 'ligar', "
+                          "'desligar' ou 'consultar'. Plano: o nome. Saída de áudio: o dispositivo ou 'listar'."),
+    )
+    def configuracao(ctx, item: str, valor: str | None = None):
+        v = (valor or "").strip().lower()
+        ligar = None if v in ("", "consultar", "status") else v in ("ligar", "liga", "on", "sim", "ativar", "true", "1")
+        try:
+            if item == "brilho":
+                if v in ("", "consultar"):
+                    return {"ok": True, "resumo": f"O brilho está em {configuracoes.brilho_atual()}%."}
+                if v in ("mais", "aumentar", "+"):
+                    return {"ok": True, "resumo": f"Brilho em {configuracoes.mudar_brilho(15)}%."}
+                if v in ("menos", "diminuir", "-"):
+                    return {"ok": True, "resumo": f"Brilho em {configuracoes.mudar_brilho(-15)}%."}
+                numero = int("".join(c for c in v if c.isdigit()) or "-1")
+                if numero < 0:
+                    return {"ok": False, "resumo": "Qual brilho? Diga um número de 0 a 100."}
+                return {"ok": True, "resumo": f"Brilho em {configuracoes.definir_brilho(numero)}%."}
+            if item in ("wifi", "bluetooth"):
+                nome = "Wi-Fi" if item == "wifi" else "Bluetooth"
+                estado = configuracoes.radio(item, ligar)
+                if ligar is None:
+                    return {"ok": True, "resumo": f"{nome} {'ligado' if estado == 'On' else 'desligado'}."}
+                return {"ok": True, "resumo": f"{nome} {'ligado' if ligar else 'desligado'}."}
+            if item == "modo_escuro":
+                escuro = configuracoes.modo_escuro(ligar)
+                if ligar is None:
+                    return {"ok": True, "resumo": "O modo escuro está ligado." if escuro else "O modo claro está ativo."}
+                return {"ok": True, "resumo": "Modo escuro ligado." if escuro else "Modo claro ligado."}
+            if item == "plano_energia":
+                if not v:
+                    return {"ok": False, "resumo": "Qual plano? Economia, equilibrado, alto desempenho ou desempenho máximo."}
+                nome = configuracoes.definir_plano(v)
+                return {"ok": True, "resumo": f"Plano de energia: {nome}."}
+            if item == "nao_perturbe":
+                ligar = True if ligar is None else ligar
+                configuracoes.nao_perturbe(ligar)
+                return {"ok": True, "resumo": "Não perturbe ligado: notificações silenciadas." if ligar
+                        else "Notificações de volta."}
+            if v in ("", "listar", "consultar"):
+                lista = configuracoes.dispositivos_saida()
+                atual = next((d["nome"] for d in lista if d["padrao"]), "?")
+                outros = ", ".join(d["nome"] for d in lista if not d["padrao"]) or "nenhuma outra"
+                return {"ok": True, "resumo": f"Saída atual: {atual}. Outras: {outros}."}
+            nome = configuracoes.definir_saida(valor or "")
+            return {"ok": True, "resumo": f"Som saindo em {nome}."}
+        except (ErroConfiguracao, windows.NaoSuportado, OSError) as erro:
+            return {"ok": False, "resumo": str(erro), "_direta": True}
+
+    # ------------------------------------------------------------------ terminal
+    @ferramenta(
+        "terminal",
+        "Roda um comando no terminal do Windows (cmd) e devolve a saída. Comandos da lista permitida rodam na hora; "
+        "outros exigem confirmação com rosto. Use para: IP, ping, git status, winget, versões instaladas etc.",
+        nivel=lambda a: LIVRE if app.terminal.permitido(a.get("comando", "")) else ROSTO,
+        descrever=lambda a: f"rodar o comando: {a.get('comando', '')}",
+        comando=P("string", "O comando exato.", obrigatorio=True),
+    )
+    def terminal(ctx, comando: str):
+        try:
+            codigo, saida = app.terminal.executar(comando)
+        except Exception as erro:  # noqa: BLE001 - inclui o tempo esgotado
+            return {"ok": False, "resumo": f"O comando falhou: {erro}"}
+        if ctx.canal != "voz" and saida:
+            app.hologramas.mostrar("texto", {"texto": f"> {comando}\n\n{saida}"}, titulo="Terminal")
+        return {"ok": codigo == 0, "resumo": f"Comando terminou com código {codigo}.", "saida": saida or "(sem saída)"}
+
+    # ------------------------------------------------------------------ registro de atividades
+    @ferramenta(
+        "atividades",
+        "Mostra o registro do que a Sexta-Feira fez no computador (holograma) ou resume o que ela fez hoje.",
+        direta=True,
+        acao=P("string", "Ação.", enum=["mostrar", "resumo_hoje"], obrigatorio=True),
+    )
+    def atividades(ctx, acao: str):
+        if acao == "resumo_hoje":
+            return {"ok": True, "resumo": app.atividades.resumo_de_hoje()}
+        app.hologramas.mostrar("atividades")
+        return {"ok": True, "resumo": "Registro de atividades na tela."}

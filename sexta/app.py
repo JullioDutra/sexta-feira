@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
+from .atividades import Atividades
 from .cerebro.agente import Agente
 from .cerebro.ferramentas import Contexto, Registro
 from .cerebro.memoria import Memoria
@@ -19,11 +20,14 @@ from .estado import Estado
 from .eventos import Barramento
 from .habilidades import registrar_ferramentas, windows
 from .habilidades.apps import CatalogoApps
+from .habilidades.arquivos import Arquivos
 from .habilidades.clima import ServicoClima
 from .habilidades.hologramas import Hologramas
+from .habilidades.janelas import Layouts
 from .habilidades.lembretes import Lembretes
 from .habilidades.noticias import ServicoNoticias
 from .habilidades.rotinas import Rotinas
+from .habilidades.terminal import Terminal
 from .seguranca import Acesso, Sessao
 from .util.tempo import data_extenso, saudacao
 from .visao.camera import Camera
@@ -63,8 +67,13 @@ class SextaFeira:
         self.hologramas = Hologramas(self)
         self.lembretes = Lembretes(self, cfg.dados / "sexta.db")
         self.rotinas = Rotinas(self, cfg.pasta_config / "rotinas.yaml", cfg.pasta_config / "rotinas_criadas.yaml")
+        self.arquivos = Arquivos(cfg.pastas_arquivos)
+        self.layouts = Layouts(self, cfg.pasta_config / "layouts.yaml", cfg.pasta_config / "layouts_criados.yaml")
+        self.terminal = Terminal(cfg.pasta_config / "terminal.yaml")
+        self.atividades = Atividades(self, cfg.dados / "atividades.jsonl")
 
         self.registro = Registro()
+        self.registro.ao_executar = self.atividades.anotar
         registrar_ferramentas(self, self.registro)
         self.agente = Agente(self)
 
@@ -134,6 +143,26 @@ class SextaFeira:
                         else "Não reconheci você.")
         return False
 
+    def verificar_para_acao(self, ctx: Contexto) -> tuple[bool, str]:
+        """Nível 3 de segurança: depois do "sim", confere o rosto antes de apagar, desligar ou rodar comando."""
+        if ctx.canal != "voz":
+            # celular pareado e HUD local já passaram pela chave de acesso (e pelo PIN, se houver bloqueio)
+            return True, ""
+        if not self.rosto.cadastrado() or not self.rosto.modelos_presentes():
+            log.warning("Ação de nível 3 confirmada só por voz: rosto não cadastrado")
+            return True, ""
+        self.estado.definir("verificando")
+        try:
+            resultado = self.rosto.verificar(timeout=6.0, exigir_piscada=False, progresso=self._progresso_verificacao)
+        finally:
+            self.estado.definir("pensando")
+        if resultado.ok:
+            self.sessao.registrar_verificacao()
+            return True, ""
+        if resultado.motivo == "sem_rosto":
+            return False, "Não consegui ver seu rosto, então não fiz. Olhe para a câmera e peça de novo."
+        return False, "Não reconheci você, então não fiz."
+
     def desbloquear_por_rosto(self, automatico: bool = False) -> bool:
         if not self.sessao.bloqueada:
             return True
@@ -201,7 +230,8 @@ class SextaFeira:
         self.estado.aviso("ollama", None if ok else mensagem)
         log.info(mensagem)
         if ok:
-            threading.Thread(target=self.agente.ollama.aquecer, daemon=True).start()
+            threading.Thread(target=self.agente.aquecer, name="aquecer-ia", daemon=True).start()
+        self.arquivos.iniciar()
         if self.cfg.abrir_hud:
             self.abrir_hud()
         if self.com_voz:

@@ -9,6 +9,7 @@ export type TipoHolograma =
   | "lembretes"
   | "rotinas"
   | "camera"
+  | "atividades"
   | "texto"
   | "imagem";
 
