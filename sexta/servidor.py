@@ -410,6 +410,45 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             raise HTTPException(404, resultado.get("resumo"))
         return resultado
 
+    # -------------------------------------------------------------- jornal
+    def _noticia(dados: dict) -> dict:
+        item = app.jornal.por_id(str(dados.get("id") or ""))
+        if item is None:
+            raise HTTPException(404, "Essa notícia não está mais na lista. Atualize o jornal.")
+        return item
+
+    @api.post("/api/jornal/atualizar")
+    async def atualizar_jornal(request: Request, _: Cliente = Depends(autenticado)):
+        aba = (await request.json()).get("aba") or "destaques"
+        dados = await asyncio.to_thread(app.jornal.dados_holograma, aba)
+        app.hologramas.mostrar("jornal", dados, titulo="Jornal")
+        return {"ok": True}
+
+    @api.post("/api/jornal/ler")
+    async def ler_noticia(request: Request, cliente: Cliente = Depends(autenticado)):
+        item = _noticia(await request.json())
+        ctx = app.contexto("texto" if cliente.tipo == "pc" else "celular", cliente)
+        aba, numero = app.jornal.posicao(item)
+        resultado = await asyncio.to_thread(app.registro.executar, "jornal", {"acao": "ler", "aba": aba, "numero": numero}, ctx)
+        if cliente.tipo == "pc" and resultado.get("ok"):
+            app.fala.falar(resultado["resumo"])
+        return {"texto": resultado["resumo"], "link": item.get("link", "")}
+
+    @api.post("/api/jornal/salvar")
+    async def salvar_noticia(request: Request, _: Cliente = Depends(autenticado)):
+        item = _noticia(await request.json())
+        novo = await asyncio.to_thread(app.jornal.salvar, item)
+        return {"ok": True, "texto": "Salva para depois." if novo else "Essa já estava salva."}
+
+    @api.delete("/api/jornal/salvas/{id_}")
+    async def remover_noticia_salva(id_: str, _: Cliente = Depends(autenticado)):
+        if not await asyncio.to_thread(app.jornal.remover_salva, id_):
+            raise HTTPException(404, "Não estava salva.")
+        if app.hologramas.aberto("jornal"):
+            dados = await asyncio.to_thread(app.jornal.dados_holograma, "salvas")
+            app.hologramas.atualizar_tipo("jornal", dados)
+        return {"ok": True}
+
     # -------------------------------------------------------------- protocolos (editor visual)
     @api.get("/api/protocolos")
     def protocolos(_: Cliente = Depends(autenticado)):
@@ -465,6 +504,7 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
         app.apps.recarregar()
         app.layouts.recarregar()
         app.terminal.recarregar()
+        app.jornal.recarregar()
         return [r.para_dict() for r in app.rotinas.listar()]
 
     @api.get("/api/prints/{nome}")

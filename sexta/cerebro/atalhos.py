@@ -88,6 +88,14 @@ _CAMERA = re.compile(r"^(o que e isso|que objeto e esse|o que eu (to|estou) segu
 _FECHAR_HOLO = re.compile(r"^(fecha|fechar|esconde|tira) " + _ART +
                           r"(globo|relogio|sistema|lembretes|rotinas|camera|noticias|clima|atividades|registro de atividades)$")
 _NAO_TOCAR = {"proxima", "anterior", "musica", "de novo", "novamente", "o som", "som"}
+_JORNAL = re.compile(r"^((abre|mostra|abrir|mostrar|traz) (o )?)?(jornal|central de noticias)( de hoje)?$")
+_TEMA_ADD = re.compile(r"^(me )?(avisa|avise|alerta|notifica)( me)? (quando|se|assim que) (sair|tiver|aparecer|publicarem) "
+                       r"(alguma |uma )?(noticia|novidade|novidades|noticias) (de|do|da|dos|das|sobre) (.+)$")
+_TEMA_DEL = re.compile(r"^(para|pare|deixa) de (me )?(avisar|acompanhar|alertar) (sobre |de |do |da )?(.+)$")
+_NUMEROS = {"primeira": 1, "1": 1, "segunda": 2, "2": 2, "terceira": 3, "3": 3, "quarta": 4, "4": 4, "quinta": 5,
+            "5": 5, "sexta": 6, "6": 6}
+_NOTICIA_N = re.compile(r"^(le|leia|ler|resume|salva|salvar|guarda) (a )?(primeira|segunda|terceira|quarta|quinta|sexta|[1-6]|"
+                        r"noticia (?:numero )?[1-6])( noticia)?( de| da| do| em)?( tecnologia| brasil| destaques| temas| salvas)?$")
 _PALAVRAS_ARQUIVO = re.compile(r"\b(pdf|arquivo|arquivos|planilha|documento|foto|fotos|imagem|video|contrato|apresentacao)\b")
 
 
@@ -185,6 +193,19 @@ def _casar(t: str, ctx) -> Plano | None:
         return rodar("holograma", {"acao": "fechar", "tipo": tipo})
     if _ATIVIDADES.match(t):
         return rodar("atividades", {"acao": "resumo_hoje"})
+
+    # -- jornal
+    if _JORNAL.match(t):
+        return rodar("jornal", {"acao": "mostrar"})
+    if m := _TEMA_ADD.match(t):
+        return rodar("jornal", {"acao": "adicionar_tema", "tema": m.group(9)})
+    if m := _TEMA_DEL.match(t):
+        return rodar("jornal", {"acao": "remover_tema", "tema": m.group(5)})
+    if m := _NOTICIA_N.match(t):
+        numero = _NUMEROS.get(m.group(3).split()[-1], 1)
+        aba = (m.group(6) or " destaques").strip()
+        acao = "salvar" if m.group(1).startswith(("salva", "guarda")) else "ler"
+        return rodar("jornal", {"acao": acao, "aba": aba, "numero": numero})
 
     # -- configurações
     if m := _BRILHO_N.match(t):

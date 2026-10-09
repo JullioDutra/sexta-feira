@@ -1,0 +1,20 @@
+# Central de notícias da Sexta-Feira
+# ---------------------------------------------------------------------------
+# Fontes de cada aba do holograma Jornal. Pode tirar, trocar ou incluir (qualquer feed RSS ou Atom).
+# Especiais:  google:brasil (e google:mundo, google:economia, google:esportes...)  ·  hackernews:  ·  github:trending
+# Outras categorias que você criar (ex.: "esportes:") entram nos Destaques.
+# Depois de editar, diga "Sexta-Feira, recarrega as rotinas" ou reinicie.
+#
+# Temas acompanhados ("me avisa quando sair notícia de RTX 60") ficam em dados/temas.json.
+
+fontes:
+  brasil:
+    - Google Notícias: google:brasil
+    - g1: https://g1.globo.com/rss/g1/
+  tecnologia:
+    - Tecnoblog: https://tecnoblog.net/feed/
+    - Canaltech: https://canaltech.com.br/rss/
+    - Olhar Digital: https://olhardigital.com.br/feed/
+    - The Verge: https://www.theverge.com/rss/index.xml
+    - Hacker News: "hackernews:"
+    - GitHub em alta: github:trending

@@ -16,13 +16,13 @@ from . import sistema_info
 log = logging.getLogger(__name__)
 
 TIPOS = ["clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "texto",
-         "imagem", "protocolo"]
+         "imagem", "protocolo", "jornal"]
 TITULOS = {
     "clima": "Clima", "noticias": "Notícias", "sistema": "Sistema", "relogio": "Relógio", "globo": "Globo",
     "lembretes": "Lembretes", "rotinas": "Protocolos", "camera": "Câmera", "atividades": "Registro de atividades",
-    "texto": "Nota", "imagem": "Imagem", "protocolo": "Novo protocolo",
+    "texto": "Nota", "imagem": "Imagem", "protocolo": "Novo protocolo", "jornal": "Jornal",
 }
-UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "protocolo"}
+UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "protocolo", "jornal"}
 
 
 class Hologramas:
@@ -97,6 +97,8 @@ class Hologramas:
             return {"itens": [r.para_dict() for r in app.rotinas.listar()]}
         if tipo == "atividades":
             return app.atividades.para_holograma()
+        if tipo == "jornal":
+            return app.jornal.dados_holograma()
         if tipo == "globo":
             prefs = app.prefs
             if prefs.get("cidade_lat") is not None:

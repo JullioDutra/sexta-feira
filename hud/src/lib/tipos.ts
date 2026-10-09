@@ -11,6 +11,7 @@ export type TipoHolograma =
   | "camera"
   | "atividades"
   | "protocolo"
+  | "jornal"
   | "texto"
   | "imagem";
 

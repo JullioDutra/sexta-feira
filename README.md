@@ -22,6 +22,7 @@ Inspirada no projeto [vannu07/jarvis](https://github.com/vannu07/jarvis), reescr
 | **Hologramas** | HUD 3D com núcleo animado e painéis: clima, notícias, sistema, relógio, globo, lembretes, rotinas, câmera, notas e prints. Você chama por voz ou pela barra lateral e mexe com as mãos, o mouse ou o toque. |
 | **Automações** | Abre apps (inclusive da Microsoft Store), sites e pastas; fecha programas; controla mídia e volume; tira print; bloqueia a tela; desliga/reinicia com confirmação; pesquisa e toca no YouTube. |
 | **Protocolos** | Automações com gatilho → condição → ação. Gatilhos: frase, horário, desbloquear o PC, abrir/fechar um app, bateria baixa, pendrive, arquivo novo numa pasta, rede Wi-Fi, voltar ao PC. Condições: dias, faixa de horário, em reunião, chovendo, rede. Crie por voz ("toda vez que eu abrir o Valorant, fecha o Chrome e coloca o PC no desempenho máximo"): ela mostra o protocolo e você aprova. |
+| **Jornal** | Briefing matinal de até 2 minutos (clima, agenda, 5 notícias do Brasil e 5 de tecnologia). Holograma com abas Destaques / Brasil / Tecnologia / Seus temas / Salvas; a mesma notícia de várias fontes vira uma só. "Me avisa quando sair notícia de RTX 60" gera alerta por voz e no celular. |
 | **Lembretes e alarmes** | "Me lembra de ligar pro João amanhã às 10h", "me acorda às 7 todo dia útil", "timer de 15 minutos". |
 | **Celular** | Mesma interface no navegador do celular: segure para falar, escreva, toque nos atalhos, veja os painéis e ouça a resposta no próprio celular. |
 | **Memória** | "Lembra que meu time é o Cruzeiro" — ela guarda e usa nas próximas conversas. |
@@ -183,6 +184,15 @@ O reconhecimento facial da Sexta-Feira é bom para o dia a dia, mas não substit
 
 ---
 
+## Jornal (central de notícias)
+
+- **"Abre o jornal"** (ou o ícone na barra lateral): abas **Destaques**, **Brasil**, **Tecnologia**, **Seus temas** e **Salvas**. A mesma notícia dada por várias fontes aparece uma vez só, com "(3 fontes)" — e sobe nos destaques.
+- **Toque ou pinça rápida numa notícia:** ela abre a matéria, resume em até 5 frases e lê em voz alta. **Arraste para o lado** (ou toque no marcador) para salvar para depois.
+- Por voz: "lê a segunda notícia de tecnologia", "salva a primeira", "me avisa quando sair notícia de RTX 60", "para de me avisar sobre RTX 60", "quais temas você acompanha?".
+- **Seus temas:** a cada 15 minutos ela procura novidades e avisa por voz, no HUD e no celular — só do que saiu depois que você pediu.
+- **Briefing:** "bom dia" ou "briefing" — saudação, clima, agenda do dia, 5 manchetes do Brasil, 5 de tecnologia e seus temas, em até 2 minutos (a IA escreve o roteiro; sem IA, ela lê as manchetes). Para ouvir todo dia: "agenda o briefing para as 7h30 nos dias úteis" (vira um protocolo que dá para ajustar no editor).
+- **Fontes** em `config/noticias.yaml`: Google Notícias e g1 (Brasil); Tecnoblog, Canaltech, Olhar Digital, The Verge, Hacker News e GitHub em alta (tecnologia). Qualquer feed RSS/Atom serve; crie outras categorias (ex.: `esportes:`) e elas entram nos Destaques.
+
 ## Protocolos (automações)
 
 Peça por voz e aprove:
@@ -277,7 +287,7 @@ Roda no seu PC: ativação por voz, transcrição, reconhecimento facial e de m�
 - **cérebro Claude** (se você usar) — o texto dos pedidos que não são atalhos, o histórico recente da conversa, os fatos da memória e os resultados das ferramentas; em "analisa a tela"/"o que é isso?", a imagem; em "resume o que eu copiei", o texto copiado. Tudo vai para a API da Anthropic;
 
 - **clima** — coordenadas da cidade para o Open-Meteo;
-- **notícias** — o assunto pesquisado no Google Notícias;
+- **notícias** — o Jornal baixa os feeds das fontes de `config/noticias.yaml`, os temas que você acompanha são pesquisados no Google Notícias e, ao ler uma matéria, a página dela é aberta;
 - **voz neural** — o texto de cada resposta vai para o serviço de voz da Microsoft (use `VOZ_MOTOR=windows` para ficar 100% offline);
 - **YouTube e pesquisas** — quando você pede.
 

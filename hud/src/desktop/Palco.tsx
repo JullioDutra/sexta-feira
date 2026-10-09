@@ -11,6 +11,7 @@ import { Atividades, Camera, Imagem, Lembretes, Nota, Protocolo, Rotinas } from 
 import Noticias from "../holograms/Noticias";
 import Relogio from "../holograms/Relogio";
 import Sistema from "../holograms/Sistema";
+import Jornal from "../holograms/Jornal";
 import { ALTURA_NUCLEO } from "./Nucleo";
 
 export interface Pose {
@@ -205,6 +206,8 @@ function Conteudo({ holo }: { holo: Holograma }) {
       return <Atividades dados={holo.dados} />;
     case "protocolo":
       return <Protocolo dados={holo.dados} />;
+    case "jornal":
+      return <Jornal dados={holo.dados} />;
     case "imagem":
       return <Imagem dados={holo.dados} />;
     default:

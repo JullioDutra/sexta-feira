@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 from ..cerebro.ferramentas import CONFIRMAR, LIVRE, ROSTO, P, Registro
@@ -292,6 +293,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
             app.apps.recarregar()
             app.layouts.recarregar()
             app.terminal.recarregar()
+            app.jornal.recarregar()
             return {"ok": True, "resumo": f"Rotinas recarregadas: {len(rotinas.listar())} no total."}
         if acao == "listar":
             itens = rotinas.listar()
@@ -369,7 +371,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "holograma",
         "Mostra ou fecha hologramas no HUD. Tipos: clima, noticias, sistema, relogio, globo, lembretes, rotinas, camera, "
-        "atividades (registro do que a Sexta fez no PC), texto (anotação/lista que o usuário pedir para exibir).",
+        "atividades (registro do que a Sexta fez no PC), jornal (central de notícias com abas), texto (anotação/lista que o usuário pedir para exibir).",
         direta=True,
         acao=P("string", "Ação.", enum=["mostrar", "fechar", "fechar_todos"], obrigatorio=True),
         tipo=P("string", "Tipo do holograma.", enum=TIPOS_HOLOGRAMA),
@@ -390,6 +392,9 @@ def registrar_ferramentas(app, registro: Registro) -> None:
             return obter_clima(ctx)
         if tipo == "noticias":
             return obter_noticias(ctx)
+        if tipo == "jornal":
+            h.mostrar("jornal", app.jornal.dados_holograma(), titulo="Jornal")
+            return {"ok": True, "resumo": "Jornal na tela."}
         if tipo == "texto":
             h.mostrar("texto", {"texto": conteudo or ""}, titulo=titulo or "Nota")
         elif tipo == "camera":
@@ -781,3 +786,99 @@ def registrar_ferramentas_pc(app, registro: Registro) -> None:
             return {"ok": True, "resumo": app.atividades.resumo_de_hoje()}
         app.hologramas.mostrar("atividades")
         return {"ok": True, "resumo": "Registro de atividades na tela."}
+
+    registrar_ferramentas_jornal(app, registro)
+
+
+# ---------------------------------------------------------------------------
+# Fase 3: central de notícias
+# ---------------------------------------------------------------------------
+
+LEITURA_SISTEMA = ("Você é a Sexta-Feira. Resuma a matéria abaixo para ser FALADA em voz alta, em português do Brasil, "
+                   "em no máximo 5 frases claras: o fato principal, os números ou nomes importantes e por que importa. "
+                   "Sem markdown, listas nem links.")
+
+
+def registrar_ferramentas_jornal(app, registro: Registro) -> None:
+    from .jornal import ABAS
+
+    ferramenta = registro.ferramenta
+
+    def achar(aba: str | None, numero: int | None):
+        aba = aba if aba in ABAS else "destaques"
+        return app.jornal.item(aba, int(numero or 1))
+
+    @ferramenta(
+        "jornal",
+        "Central de notícias: mostrar o holograma Jornal (abas destaques, brasil, tecnologia, temas, salvas), "
+        "fazer o briefing do dia agora, ler (resumir) a notícia N de uma aba, salvar a notícia N para depois, "
+        "gerenciar os temas que o usuário acompanha ('me avisa quando sair notícia de RTX 60') e agendar o "
+        "briefing matinal num horário.",
+        direta=True,
+        acao=P("string", "Ação.", enum=["mostrar", "briefing", "ler", "salvar", "temas", "adicionar_tema",
+                                        "remover_tema", "agendar_briefing"], obrigatorio=True),
+        aba=P("string", "Aba (padrão destaques).", enum=ABAS),
+        numero=P("integer", "Para ler/salvar: posição da notícia na aba (1 = a primeira)."),
+        tema=P("string", "Para os temas: o assunto, ex.: 'RTX 60', 'EA FC 27'."),
+        horario=P("string", "Para agendar_briefing: HH:MM."),
+        dias=P("array", "Para agendar_briefing: dias (seg..dom, uteis, todos). Padrão: todos.", itens={"type": "string"}),
+    )
+    def jornal(ctx, acao: str, aba: str | None = None, numero: int | None = None, tema: str | None = None,
+               horario: str | None = None, dias: list | None = None):
+        j = app.jornal
+        if acao == "briefing":
+            return {"ok": True, "resumo": app.briefing(ctx)}
+        if acao == "mostrar":
+            dados = j.dados_holograma(aba or "destaques")
+            app.hologramas.mostrar("jornal", dados, titulo="Jornal")
+            itens = dados["abas"][dados["aba"]]
+            if not itens:
+                return {"ok": True, "resumo": "Jornal na tela, mas não encontrei notícias agora."}
+            return {"ok": True, "resumo": "Na tela. Os destaques: " + "; ".join(i["titulo"] for i in itens[:3]) + "."}
+        if acao in ("ler", "salvar"):
+            item = achar(aba, numero)
+            if item is None:
+                return {"ok": False, "resumo": "Não achei essa notícia. Abra o jornal primeiro.", "_direta": True}
+            if acao == "salvar":
+                novo = j.salvar(item)
+                return {"ok": True, "resumo": "Salva para depois." if novo else "Essa já estava salva."}
+            texto = j.texto_da_materia(item)
+            resumo = ""
+            if len(texto) > 200:
+                try:
+                    resumo = app.agente.completar(LEITURA_SISTEMA, f"Título: {item['titulo']}\n\n{texto}")
+                except Exception as erro:  # noqa: BLE001
+                    log.info("Resumo da matéria sem IA: %s", erro)
+            resumo = resumo or f"{item['titulo']}. {texto[:400]}".strip()
+            leitura = {"titulo": item["titulo"], "texto": resumo, "link": item.get("link", ""), "ts": time.time()}
+            aberto = next((h for h in app.hologramas.lista() if h["tipo"] == "jornal"), None)
+            if aberto:  # mostra a leitura dentro do próprio Jornal
+                app.hologramas.atualizar_tipo("jornal", {**aberto["dados"], "leitura": leitura})
+            else:
+                app.hologramas.mostrar("texto", {"texto": f"{item['titulo']}\n\n{resumo}\n\n{item.get('link', '')}"},
+                                       titulo=", ".join(item.get("fontes") or [item.get("fonte", "Notícia")]))
+            return {"ok": True, "resumo": resumo}
+        if acao == "temas":
+            temas = [t["tema"] for t in j.temas()]
+            return {"ok": True, "resumo": ("Acompanho: " + ", ".join(temas) + ".") if temas
+                    else "Você ainda não pediu para eu acompanhar nenhum tema."}
+        if acao in ("adicionar_tema", "remover_tema"):
+            if not tema:
+                return {"ok": False, "resumo": "Qual assunto?"}
+            if acao == "adicionar_tema":
+                novo = j.adicionar_tema(tema)
+                return {"ok": True, "resumo": f"Combinado: aviso quando sair notícia sobre {tema}." if novo
+                        else f"Já estou de olho em {tema}."}
+            removidos = j.remover_tema(tema)
+            return {"ok": bool(removidos), "resumo": f"Parei de acompanhar {', '.join(removidos)}." if removidos
+                    else f"Não acompanhava {tema}."}
+        # agendar_briefing: vira um protocolo de horário (dá para editar no editor de protocolos)
+        from .rotinas import _hora
+
+        hora = _hora(horario or "")
+        if not hora:
+            return {"ok": False, "resumo": "Em que horário? Ex.: 7:30."}
+        app.rotinas.salvar(app.rotinas.rascunho(
+            "briefing matinal", [{"acao": "briefing", "valor": "true"}],
+            gatilhos=[{"tipo": "horario", "valor": hora, "dias": dias or ["todos"]}]))
+        return {"ok": True, "resumo": f"Briefing agendado para as {hora}."}

@@ -71,6 +71,24 @@ class ClienteOllama:
         except httpx.HTTPError as erro:
             log.warning("Não foi possível pré-carregar o modelo: %s", erro)
 
+    def completar(self, sistema: str, texto: str, modelo: str | None = None) -> str:
+        """Pergunta simples, sem ferramentas e sem streaming (resumos, briefing)."""
+        payload: dict[str, Any] = {"model": modelo or self.modelo, "stream": False, "keep_alive": self.manter_carregado,
+                                   "messages": [{"role": "system", "content": sistema}, {"role": "user", "content": texto}],
+                                   "options": {"temperature": 0.4, "num_ctx": self.contexto}}
+        if self._enviar_think:
+            payload["think"] = False
+        try:
+            r = self._http.post("/api/chat", json=payload, timeout=180)
+        except httpx.ConnectError as erro:
+            raise ErroOllama(f"Não consegui falar com o Ollama em {self.url}. Ele está aberto?") from erro
+        except httpx.TimeoutException as erro:
+            raise ErroOllama("O Ollama demorou demais para responder.") from erro
+        if r.status_code != 200:
+            self._erro_http(r.status_code, r.text)
+        conteudo = (r.json().get("message") or {}).get("content", "")
+        return re.sub(r"<think>.*?</think>", "", conteudo, flags=re.S).strip()
+
     def visao(self, pergunta: str, imagens_b64: list[str], sistema: str = "", modelo: str | None = None) -> str:
         """Pergunta sobre imagens a um modelo com visão (sem streaming)."""
         mensagens: list[dict[str, Any]] = []

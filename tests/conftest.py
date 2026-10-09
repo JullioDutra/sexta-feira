@@ -74,7 +74,7 @@ def app(cfg, tmp_path, monkeypatch):
     monkeypatch.setattr("sexta.config.Config.pasta_config", property(lambda self: tmp_path / "config"))
     pasta = tmp_path / "config"
     pasta.mkdir()
-    for nome in ("rotinas.yaml", "layouts.yaml", "terminal.yaml"):
+    for nome in ("rotinas.yaml", "layouts.yaml", "terminal.yaml", "noticias.yaml"):
         (pasta / nome).write_text((RAIZ / "config" / nome).read_text(encoding="utf-8"), encoding="utf-8")
     (pasta / "apps.yaml").write_text("apps:\n  meu site: https://exemplo.com\nsites:\n", encoding="utf-8")
     sexta = SextaFeira(cfg, com_voz=False)

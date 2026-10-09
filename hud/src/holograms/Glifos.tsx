@@ -103,6 +103,7 @@ export function GlifoTipo({ tipo, ...p }: Props & { tipo: string }) {
     case "clima":
       return <GlifoClima icone="parcial" {...p} />;
     case "noticias":
+    case "jornal":
       return (
         <Svg {...p}>
           <rect x="3.5" y="4.5" width="17" height="15" rx="1" />

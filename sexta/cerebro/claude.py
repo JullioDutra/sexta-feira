@@ -181,6 +181,22 @@ class ClienteClaude:
             blocos.append(bloco)
         return [{"role": "user", "content": blocos}]  # todos os resultados numa mensagem só
 
+    # -- texto simples (resumos, briefing) -----------------------------------------------------
+    def completar(self, sistema: str, texto: str, modelo: str | None = None) -> str:
+        import anthropic
+
+        try:
+            r = self._cliente.messages.create(model=modelo or self.modelo, max_tokens=8000, system=sistema,
+                                              messages=[{"role": "user", "content": texto}],
+                                              output_config={"effort": "low"})
+        except anthropic.APIConnectionError as erro:
+            raise ErroOllama("Sem conexão com o Claude. Confira a internet.") from erro
+        except anthropic.APIStatusError as erro:
+            raise ErroOllama(f"Erro da API do Claude ({erro.status_code}): {erro.message}") from erro
+        if r.stop_reason == "refusal":
+            return ""
+        return "".join(b.text for b in r.content if b.type == "text").strip()
+
     # -- visão ---------------------------------------------------------------------------
     def visao(self, pergunta: str, imagens_b64: list[str], sistema: str = "", modelo: str | None = None) -> str:
         import anthropic

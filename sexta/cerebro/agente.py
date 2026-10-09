@@ -219,6 +219,10 @@ class Agente:
         if self.modelo_rapido and self.modelo_rapido != self.ollama.modelo:
             self.ollama.aquecer(mensagens, ferramentas, modelo=self.modelo_rapido)
 
+    def completar(self, sistema: str, texto: str, rapido: bool = True) -> str:
+        """Texto sem ferramentas (resumos, briefing). Usa o cérebro rápido quando houver."""
+        return self.ollama.completar(sistema, texto, modelo=(self.modelo_rapido or None) if rapido else None)
+
     def processar(self, texto: str, canal: str = "voz", cliente=None, falar: bool = True) -> dict[str, Any]:
         """Processa um pedido do usuário e devolve ``{"texto", "resultados", "id"}``."""
         texto = (texto or "").strip()
