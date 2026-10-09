@@ -1,0 +1,25 @@
+# Layouts de janelas
+# ---------------------------------------------------------------------------
+# Diga "Sexta-Feira, layout trabalho" (ou use "layout: trabalho" numa rotina).
+# Se o app não estiver aberto, ela abre e espera a janela aparecer.
+#
+# posicao: esquerda | direita | cima | baixo | superior_esquerda | superior_direita |
+#          inferior_esquerda | inferior_direita | centro | tela_cheia
+# monitor: 0 = o mais à esquerda, 1 = o próximo... (opcional)
+# abrir_com: o que abrir se o app estiver fechado (opcional; padrão = o próprio nome)
+#
+# Para salvar o jeito que suas janelas estão agora: "Sexta-Feira, salva esse layout como estudo".
+
+layouts:
+  trabalho:
+    - app: VS Code
+      abrir_com: Visual Studio Code
+      posicao: esquerda
+    - app: navegador
+      abrir_com: Edge
+      posicao: direita
+
+  foco:
+    - app: VS Code
+      abrir_com: Visual Studio Code
+      posicao: tela_cheia

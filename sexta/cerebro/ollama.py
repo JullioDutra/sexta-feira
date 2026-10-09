@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Iterator
 
 import httpx
@@ -50,24 +51,70 @@ class ClienteOllama:
             return False, f"O modelo {self.modelo} não está baixado. Rode no terminal: ollama pull {self.modelo}"
         return True, f"Ollama ok ({self.modelo})"
 
-    def aquecer(self) -> None:
-        """Carrega o modelo na memória (mensagens vazias só carregam)."""
+    def aquecer(self, mensagens: list[dict[str, Any]] | None = None, ferramentas: list[dict] | None = None,
+                modelo: str | None = None) -> None:
+        """Carrega o modelo na memória e, com ``mensagens``, já processa o prompt de sistema.
+
+        O Ollama reaproveita o começo do prompt entre pedidos (cache): com o prompt de
+        sistema e as ferramentas já processados, o primeiro pedido de verdade sai bem mais rápido.
+        """
+        payload: dict[str, Any] = {"model": modelo or self.modelo, "messages": [], "keep_alive": self.manter_carregado}
+        if mensagens:
+            payload.update({"messages": mensagens, "stream": False,
+                            "options": {"num_ctx": self.contexto, "num_predict": 1}})
+            if ferramentas:
+                payload["tools"] = ferramentas
+            if self._enviar_think:
+                payload["think"] = False
         try:
-            self._http.post("/api/chat", json={"model": self.modelo, "messages": [],
-                                               "keep_alive": self.manter_carregado}, timeout=120)
+            self._http.post("/api/chat", json=payload, timeout=180)
         except httpx.HTTPError as erro:
             log.warning("Não foi possível pré-carregar o modelo: %s", erro)
 
+    def visao(self, pergunta: str, imagens_b64: list[str], sistema: str = "", modelo: str | None = None) -> str:
+        """Pergunta sobre imagens a um modelo com visão (sem streaming)."""
+        mensagens: list[dict[str, Any]] = []
+        if sistema:
+            mensagens.append({"role": "system", "content": sistema})
+        mensagens.append({"role": "user", "content": pergunta, "images": imagens_b64})
+        payload: dict[str, Any] = {"model": modelo or self.modelo, "messages": mensagens, "stream": False,
+                                   "keep_alive": self.manter_carregado,
+                                   "options": {"temperature": 0.2, "num_ctx": max(self.contexto, 8192)}}
+        if self._enviar_think:
+            payload["think"] = False
+        try:
+            r = self._http.post("/api/chat", json=payload, timeout=240)
+        except httpx.ConnectError as erro:
+            raise ErroOllama(f"Não consegui falar com o Ollama em {self.url}. Ele está aberto?") from erro
+        except httpx.TimeoutException as erro:
+            raise ErroOllama("O modelo de visão demorou demais para responder.") from erro
+        if r.status_code != 200:
+            texto = r.text.lower()
+            if "image" in texto or "vision" in texto or "multimodal" in texto:
+                raise ErroOllama(f"O modelo {modelo or self.modelo} não enxerga imagens. Defina OLLAMA_MODELO_VISAO "
+                                 "no .env com um modelo de visão (ex.: qwen2.5vl:7b ou gemma3:12b).")
+            try:
+                self._erro_http(r.status_code, r.text)
+            except _ThinkNaoSuportado:
+                self._enviar_think = False
+                return self.visao(pergunta, imagens_b64, sistema, modelo)
+        conteudo = (r.json().get("message") or {}).get("content", "")
+        return re.sub(r"<think>.*?</think>", "", conteudo, flags=re.S).strip()
+
     # ------------------------------------------------------------------
     def conversar(self, mensagens: list[dict[str, Any]], ferramentas: list[dict] | None = None,
-                  cancelado=lambda: False) -> Iterator[dict[str, Any]]:
+                  cancelado=lambda: False, *, modelo: str | None = None, max_tokens: int | None = None
+                  ) -> Iterator[dict[str, Any]]:
         """Gera eventos: ``{"tipo": "texto"|"pensamento"|"ferramentas"|"fim", ...}``."""
+        opcoes: dict[str, Any] = {"temperature": self.temperatura, "num_ctx": self.contexto}
+        if max_tokens and not self.pensar:  # pensando, o raciocínio também conta no limite
+            opcoes["num_predict"] = max_tokens
         payload: dict[str, Any] = {
-            "model": self.modelo,
+            "model": modelo or self.modelo,
             "messages": mensagens,
             "stream": True,
             "keep_alive": self.manter_carregado,
-            "options": {"temperature": self.temperatura, "num_ctx": self.contexto},
+            "options": opcoes,
         }
         if ferramentas:
             payload["tools"] = ferramentas

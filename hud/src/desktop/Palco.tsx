@@ -7,7 +7,7 @@ import type { Holograma } from "../lib/tipos";
 import Clima from "../holograms/Clima";
 import { GlifoTipo, Icone } from "../holograms/Glifos";
 import Globo from "../holograms/Globo";
-import { Camera, Imagem, Lembretes, Nota, Rotinas } from "../holograms/Listas";
+import { Atividades, Camera, Imagem, Lembretes, Nota, Rotinas } from "../holograms/Listas";
 import Noticias from "../holograms/Noticias";
 import Relogio from "../holograms/Relogio";
 import Sistema from "../holograms/Sistema";
@@ -201,6 +201,8 @@ function Conteudo({ holo }: { holo: Holograma }) {
       return <Rotinas />;
     case "camera":
       return <Camera />;
+    case "atividades":
+      return <Atividades dados={holo.dados} />;
     case "imagem":
       return <Imagem dados={holo.dados} />;
     default:

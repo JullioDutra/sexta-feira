@@ -9,10 +9,16 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
+# Dica de vocabulário: deixa o Whisper mais certeiro com nomes de apps e comandos
+DICA_PADRAO = ("Comandos para a assistente Sexta-Feira em português do Brasil: abre o Spotify, fecha o Chrome, "
+               "coloca o VS Code na esquerda, volume 30, brilho 70, liga o Wi-Fi, modo escuro, analisa a tela, "
+               "acha o PDF do contrato, organiza os Downloads.")
+
 # Frases que o Whisper costuma "alucinar" em silêncio ou ruído
 ALUCINACOES = (
     "legendas pela comunidade", "amara.org", "obrigado por assistir", "inscreva-se no canal",
     "legendado por", "transcrição por", "tradução e legendas", "e aí, pessoal", "sous-titres",
+    "comandos para a assistente",  # eco da dica de vocabulário
 )
 
 
@@ -64,7 +70,8 @@ class Transcritor:
                 vad_filter=True,
                 vad_parameters={"min_silence_duration_ms": 400},
                 condition_on_previous_text=False,
-                initial_prompt=dica or "Conversa em português do Brasil com a assistente Sexta-Feira.",
+                without_timestamps=True,
+                initial_prompt=dica or DICA_PADRAO,
                 no_speech_threshold=0.6,
             )
             textos = []

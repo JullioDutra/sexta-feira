@@ -14,6 +14,10 @@
 #   lembretes: true (lê os lembretes de hoje)
 #   holograma: clima | noticias | sistema | relogio | globo | lembretes | rotinas
 #   print: true               bloquear: true (bloqueia o Windows)
+#   layout: trabalho          arruma as janelas (ver config/layouts.yaml)
+#   minimizar_tudo: true      organizar_downloads: true | data (também separa por mês)
+#   plano_energia: economia | equilibrado | alto desempenho | desempenho maximo
+#   nao_perturbe: true|false  modo_escuro: true|false    brilho: 0-100 | mais | menos
 #   executar: "comando"       roda um comando do Windows (só vale neste arquivo)
 #
 # Para rodar sozinha num horário, use horario (entre aspas!) e dias:
@@ -26,8 +30,7 @@ rotinas:
     frases: ["modo trabalho", "hora de trabalhar", "vamos trabalhar"]
     passos:
       - falar: "Preparando seu ambiente de trabalho."
-      - abrir: "Visual Studio Code"
-      - abrir: "gmail"
+      - layout: trabalho          # VS Code à esquerda, navegador à direita
       - volume: 30
       - tocar_youtube: "lofi hip hop para concentrar"
 
@@ -35,6 +38,8 @@ rotinas:
     frases: ["modo jogo", "hora do jogo", "vamos jogar"]
     passos:
       - falar: "Modo jogo ativado. Boa partida."
+      - plano_energia: desempenho maximo
+      - nao_perturbe: true
       - abrir: "Steam"
       - abrir: "Discord"
       - volume: 60
@@ -61,5 +66,12 @@ rotinas:
     passos:
       - falar: "Modo foco ativado. Fechei as distrações."
       - fechar: "Discord"
+      - nao_perturbe: true
       - volume: 20
       - holograma: relogio
+
+  fantasma:
+    frases: ["protocolo fantasma", "modo fantasma", "alguem chegando"]
+    passos:
+      - minimizar_tudo: true
+      - volume: mudo

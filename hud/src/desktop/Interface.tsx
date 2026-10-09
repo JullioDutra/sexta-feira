@@ -154,6 +154,7 @@ const DOCA: { tipo: TipoHolograma; rotulo: string }[] = [
   { tipo: "relogio", rotulo: "Relógio" },
   { tipo: "globo", rotulo: "Globo" },
   { tipo: "camera", rotulo: "Câmera" },
+  { tipo: "atividades", rotulo: "Atividades" },
 ];
 
 export function Doca({ abrirAjustes }: { abrirAjustes: () => void }) {

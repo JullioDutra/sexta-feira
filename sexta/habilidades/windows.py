@@ -37,6 +37,23 @@ def _exigir_windows() -> None:
         raise NaoSuportado("Essa ação só funciona no Windows.")
 
 
+def ativar_dpi() -> None:
+    """Coordenadas reais de tela (sem a "virtualização" do Windows com zoom de 125%, 150%...).
+
+    Precisa vir antes de qualquer janela do processo: encaixar janelas e recortar o print
+    do monitor certo dependem disso.
+    """
+    if not WINDOWS:
+        return
+    try:
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # PER_MONITOR_AWARE_V2
+    except (AttributeError, OSError):
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except (AttributeError, OSError):
+            pass
+
+
 def apertar_tecla(nome: str, vezes: int = 1) -> None:
     _exigir_windows()
     user32 = ctypes.windll.user32
@@ -45,6 +62,37 @@ def apertar_tecla(nome: str, vezes: int = 1) -> None:
         user32.keybd_event(codigo, 0, 0, 0)
         user32.keybd_event(codigo, 0, KEYEVENTF_KEYUP, 0)
         time.sleep(0.01)
+
+
+VK_TECLAS = {"ctrl": 0x11, "alt": 0x12, "shift": 0x10, "win": 0x5B, "v": 0x56, "c": 0x43, "d": 0x44, "m": 0x4D,
+             "a": 0x41, "esquerda": 0x25, "cima": 0x26, "direita": 0x27, "baixo": 0x28, "enter": 0x0D, "tab": 0x09}
+
+
+def apertar_combinacao(*teclas: str) -> None:
+    """Aperta uma combinação, ex.: ``apertar_combinacao("ctrl", "v")``."""
+    _exigir_windows()
+    user32 = ctypes.windll.user32
+    codigos = [VK_TECLAS[t] for t in teclas]
+    for c in codigos:
+        user32.keybd_event(c, 0, 0, 0)
+        time.sleep(0.01)
+    for c in reversed(codigos):
+        user32.keybd_event(c, 0, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.01)
+
+
+def powershell(comando: str, timeout: float = 20) -> str:
+    """Roda um trecho de PowerShell sem janela e devolve a saída (UTF-8)."""
+    _exigir_windows()
+    resultado = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
+         "[Console]::OutputEncoding=[Text.Encoding]::UTF8; " + comando],
+        capture_output=True, timeout=timeout, creationflags=SEM_JANELA,
+    )
+    if resultado.returncode != 0:
+        erro = resultado.stderr.decode("utf-8", "replace").strip().splitlines()
+        raise OSError(erro[0] if erro else f"PowerShell terminou com código {resultado.returncode}")
+    return resultado.stdout.decode("utf-8-sig", "replace").strip()
 
 
 # -- volume -----------------------------------------------------------------
@@ -219,6 +267,30 @@ def apps_do_menu_iniciar() -> list[dict]:
     if isinstance(dados, dict):
         dados = [dados]
     return [{"nome": d.get("Name", ""), "id": d.get("AppID", "")} for d in dados if d.get("AppID")]
+
+
+def mandar_para_lixeira(caminho: Path) -> None:
+    """Apaga mandando para a Lixeira (recuperável)."""
+    if not WINDOWS:
+        destino = Path.home() / ".local" / "share" / "Trash" / "files"
+        destino.mkdir(parents=True, exist_ok=True)
+        import shutil
+
+        shutil.move(str(caminho), str(destino / caminho.name))
+        return
+    from ctypes import wintypes
+
+    class SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [("hwnd", wintypes.HWND), ("wFunc", ctypes.c_uint), ("pFrom", ctypes.c_wchar_p),
+                    ("pTo", ctypes.c_wchar_p), ("fFlags", ctypes.c_ushort), ("fAnyOperationsAborted", wintypes.BOOL),
+                    ("hNameMappings", ctypes.c_void_p), ("lpszProgressTitle", ctypes.c_wchar_p)]
+
+    FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_SILENT, FOF_NOERRORUI = 3, 0x40, 0x10, 0x4, 0x400
+    op = SHFILEOPSTRUCTW(None, FO_DELETE, str(caminho) + "\0", None,
+                         FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI, False, None, None)
+    codigo = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    if codigo != 0 or op.fAnyOperationsAborted:
+        raise OSError(f"O Windows não conseguiu mandar para a Lixeira (código {codigo}).")
 
 
 def fechar_processos(executaveis: list[str]) -> int:

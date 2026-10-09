@@ -24,6 +24,9 @@ from .logs import configurar_logs
 
 
 def main(argv: list[str] | None = None) -> int:
+    from .habilidades.windows import ativar_dpi
+
+    ativar_dpi()
     parser = argparse.ArgumentParser(prog="sexta", description="Sexta-Feira — assistente pessoal")
     sub = parser.add_subparsers(dest="comando")
     sub.add_parser("iniciar", help="inicia a assistente (padrão)")

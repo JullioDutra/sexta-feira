@@ -11,7 +11,13 @@ Inspirada no projeto [vannu07/jarvis](https://github.com/vannu07/jarvis), reescr
 | Área | Como funciona |
 |---|---|
 | **Voz** | Fica esperando "Sexta-Feira" (offline, Vosk). Grava o pedido, transcreve no PC (Whisper) e responde com voz neural. Depois de responder, continua ouvindo por alguns segundos para você emendar outro pedido sem repetir o nome. Dizer "Sexta-Feira" enquanto ela fala interrompe. |
-| **Cérebro** | Modelo local no Ollama (padrão `qwen3.5:9b`) com 16 ferramentas: ela decide sozinha quando consultar o clima, abrir um app, criar um lembrete etc. Comandos simples ("pausa", "volume 40", "modo jogo") nem passam pela IA e respondem na hora. |
+| **Cérebro** | Modelo local no Ollama (padrão `qwen3.5:9b`) com 24 ferramentas: ela decide sozinha quando consultar o clima, abrir um app, achar um arquivo etc. A maioria dos comandos do dia a dia ("abre o Spotify e coloca volume 30", "brilho 70", "coloca o VS Code na esquerda") nem passa pela IA e responde em milissegundos. Opcional: dois cérebros, um modelo pequeno para comandos e o maior para conversa e análise. |
+| **Arquivos** | "Acha o PDF do contrato de março", "abre o 2", "arquivos recentes", "organiza os Downloads por data", mover, renomear e mandar para a Lixeira. |
+| **Janelas** | Focar, minimizar, encaixar lado a lado, mandar para o outro monitor e layouts salvos ("layout trabalho": VS Code à esquerda, navegador à direita). |
+| **Visão** | "Analisa a tela": ela tira um print e o modelo com visão explica o erro, a planilha ou o site. "O que é isso?" olha pela webcam. |
+| **PC** | O que está pesando (CPU, RAM e GPU por app), fechar travados, brilho, Wi-Fi, Bluetooth, modo escuro, plano de energia, não perturbe, saída de áudio e terminal com lista de comandos permitidos. |
+| **Área de transferência** | "Resume o que eu copiei", "traduz isso que copiei", "corrige o texto que copiei e cola". |
+| **Segurança** | Três níveis: livre (abrir, ler), confirmação por voz (fechar, mover) e rosto + confirmação (apagar, desligar, comando fora da lista). Tudo fica no holograma **Registro de atividades**. |
 | **Rosto** | Cadastro de ~20 amostras em poses diferentes (só vetores numéricos ficam salvos, nenhuma foto). Com a proteção ligada, ela só obedece a você e exige uma piscada para desbloquear, então foto não engana. |
 | **Hologramas** | HUD 3D com núcleo animado e painéis: clima, notícias, sistema, relógio, globo, lembretes, rotinas, câmera, notas e prints. Você chama por voz ou pela barra lateral e mexe com as mãos, o mouse ou o toque. |
 | **Automações** | Abre apps (inclusive da Microsoft Store), sites e pastas; fecha programas; controla mídia e volume; tira print; bloqueia a tela; desliga/reinicia com confirmação; pesquisa e toca no YouTube. |
@@ -59,12 +65,40 @@ Diga **"Sexta-Feira"** e o pedido, numa frase só ou com uma pausa (ela responde
 | Computador | "tira um print", "bloqueia o computador", "como está o PC?", "desliga o computador" (ela confirma antes) |
 | Lembretes | "me lembra de tomar remédio às 22h todo dia", "me acorda amanhã às 6h30", "timer de 10 minutos", "quais meus lembretes?", "cancela o lembrete do remédio" |
 | Rotinas | "modo trabalho", "modo jogo", "bom dia", "cria uma rotina chamada modo estudo que abre o Notion e põe volume 20" |
-| Hologramas | "mostra o globo", "mostra o sistema", "anota na tela: comprar pão, café e leite", "fecha os hologramas" |
+| Hologramas | "mostra o globo", "mostra o sistema", "anota na tela: comprar pão, café e leite", "fecha os hologramas", "mostra o registro de atividades" |
+| Arquivos | "acha o PDF do contrato de março", "abre o primeiro", "mostra o 2 na pasta", "arquivos recentes", "move o boleto para Documentos", "renomeia o 1 para boleto outubro", "organiza os Downloads" |
+| Janelas | "foca no Spotify", "coloca o VS Code na esquerda", "coloca o VS Code e o Chrome lado a lado", "manda o Chrome pro outro monitor", "minimiza tudo", "layout trabalho", "salva esse layout como estudo" |
+| Tela e câmera | "analisa a tela", "que erro é esse?", "o que é isso?" (segurando um objeto), "lê esse papel" |
+| Área de transferência | "resume o que eu copiei", "traduz o que eu copiei para inglês", "corrige o texto que copiei e cola" |
+| Processos | "o que está pesando?", "qual programa está usando mais memória?", "consumo de GPU por app", "fecha os programas travados" |
+| Configurações | "brilho 70", "aumenta o brilho", "desliga o Wi-Fi", "liga o Bluetooth", "modo escuro", "não perturbe", "coloca o PC no modo desempenho máximo", "muda o som para o fone" |
+| Terminal | "qual meu IP?", "roda o git status", "o winget tem atualizações?" |
 | Gestos | "liga os gestos", "desliga os gestos" |
 | Memória | "lembra que meu aniversário é 12 de março", "o que você sabe sobre mim?" |
 | Privacidade | "modo privado" (ela se bloqueia até ver seu rosto), "para de ouvir" |
 
+Dá para emendar comandos: "abre o Spotify e coloca volume 30", "fecha o Discord e liga o não perturbe".
+
 Em uma sexta-feira à tarde, ela comemora.
+
+### Segurança em três níveis
+
+| Nível | Exemplos | O que acontece |
+|---|---|---|
+| **Livre** | abrir, ler, buscar, volume, janelas, brilho | executa na hora |
+| **Confirma por voz** | fechar programa, mover/renomear arquivo, organizar Downloads, encerrar processo | ela pergunta "Confirma: fechar Chrome?" e espera um "sim" (ou "não") |
+| **Rosto + confirmação** | apagar arquivo, desligar/reiniciar, comando fora da lista | depois do "sim", confere seu rosto pela câmera antes de fazer |
+
+A confirmação é feita pelo próprio programa, não pelo modelo de IA, então nenhuma resposta da IA consegue "se autoconfirmar". Se você mudar de assunto ou passar 90 segundos, o pedido é descartado. Rotinas que você escreveu não pedem confirmação a cada passo. Pelo celular pareado (ou HUD do PC), o nível 3 vale com a confirmação, já que lá não há câmera. Tudo — o que foi feito, confirmado, negado ou cancelado — vai para o holograma **Registro de atividades** (e para `dados/atividades.jsonl`). "O que você fez hoje?" resume.
+
+### Por que ela responde rápido
+
+- **Atalhos sem IA** cobrem a maioria dos comandos (inclusive compostos) e respondem em milissegundos.
+- **Prompt estável**: as instruções e as ferramentas não mudam entre pedidos, então o Ollama reaproveita o que já processou (cache) e só lê a parte nova. A hora vai junto da sua mensagem.
+- **Sem segunda volta**: quando o resultado da ferramenta já é a resposta ("Volume em 30%", "Abrindo Spotify"), ela fala direto em vez de pedir ao modelo para redigir.
+- **Pré-aquecimento**: ao iniciar, o modelo é carregado e o prompt de sistema já é processado; `OLLAMA_MANTER_CARREGADO=4h` evita recarregar.
+- **Dois cérebros** (opcional): `OLLAMA_MODELO_RAPIDO=qwen3.5:4b` para comandos curtos; o principal fica com conversa, planejamento e análise.
+- O log mostra quanto cada pedido levou e por qual caminho foi (`Pedido resolvido por atalho em 12 ms`).
 
 ---
 
@@ -147,6 +181,12 @@ rotinas:
       - holograma: relogio
 ```
 
+Os passos também podem ser `layout: trabalho`, `minimizar_tudo: true`, `plano_energia: desempenho maximo`, `nao_perturbe: true`, `modo_escuro: true`, `brilho: 40` e `organizar_downloads: true`. O exemplo `fantasma` ("protocolo fantasma") minimiza tudo e silencia.
+
+**Layouts de janelas** ficam em `config/layouts.yaml` (cada app com `posicao`: esquerda, direita, cima, baixo, quartos, centro ou tela_cheia, e `monitor` opcional). Se o app estiver fechado, ela abre e espera a janela. "Salva esse layout como estudo" grava o jeito atual das janelas em `config/layouts_criados.yaml`.
+
+**Terminal**: `config/terminal.yaml` tem a lista de comandos que ela roda sozinha (`ping *` aceita qualquer argumento; sem `*`, só o comando exato). Fora da lista, ou com `&`, `|`, `>`, ela pede confirmação com rosto.
+
 Em `config/apps.yaml` você cria apelidos ("meu jogo" → caminho do .exe, "campeonato" → endereço do seu sistema). Depois de editar, diga "recarrega as rotinas" ou use **Ajustes → Rotinas e apelidos → Recarregar arquivos**. A ação `executar` (rodar um comando do Windows) só é aceita em rotinas que você escreve à mão — rotinas criadas por voz não podem usá-la.
 
 ---
@@ -156,6 +196,10 @@ Em `config/apps.yaml` você cria apelidos ("meu jogo" → caminho do .exe, "camp
 | Variável | Para quê |
 |---|---|
 | `OLLAMA_MODELO` | modelo com suporte a ferramentas: `qwen3.5:9b` (padrão), `qwen3.5:4b` (PCs simples), `qwen3.6:27b` (GPUs de 24 GB) |
+| `OLLAMA_MODELO_RAPIDO` | opcional: modelo menor só para comandos curtos (ex.: `qwen3.5:4b`) |
+| `OLLAMA_MODELO_VISAO` | modelo com visão para "analisa a tela" (vazio = o principal) |
+| `OLLAMA_MANTER_CARREGADO` | quanto tempo o modelo fica na memória sem uso (padrão `4h`; `-1` = sempre) |
+| `PASTAS_ARQUIVOS` | pastas extras para a busca de arquivos, separadas por vírgula |
 | `OLLAMA_PENSAR` | `sim` deixa o modelo "pensar" antes de responder (mais lento) |
 | `WHISPER_MODELO` | `small` (padrão), `base` (mais rápido), `large-v3-turbo` (melhor, com GPU NVIDIA) |
 | `VOZ_MOTOR` | `edge` (voz neural, online) ou `windows` (100% offline) |
@@ -193,7 +237,9 @@ Seus dados ficam na pasta `dados/` (apague a pasta para zerar tudo). O acesso ao
 |---|---|
 | "Não consegui falar com o Ollama" | Abra o Ollama (ícone da lhama) e confira com `ollama list` se o modelo do `.env` está baixado. |
 | Ela não ouve o nome | `iniciar.bat testar-ativacao` mostra quando ela ouve. Confira o microfone padrão do Windows ou `MICROFONE=` no `.env`. |
-| Responde devagar | Use `qwen3.5:4b` e `WHISPER_MODELO=base`, ou uma GPU NVIDIA. |
+| Responde devagar | Veja no log por qual caminho o pedido foi e quanto levou. Se o seu `.env` é antigo, troque `OLLAMA_MANTER_CARREGADO=30m` por `4h`. Use `OLLAMA_MODELO_RAPIDO=qwen3.5:4b` (dois cérebros), `WHISPER_MODELO=base`, ou uma GPU NVIDIA. |
+| "Não enxerga imagens" | Defina `OLLAMA_MODELO_VISAO` com um modelo de visão (ex.: `qwen2.5vl:7b` ou `gemma3:12b`) e rode `ollama pull` dele. |
+| Brilho não muda | Monitores de PC de mesa normalmente não aceitam ajuste de brilho pelo Windows (só notebooks). |
 | Câmera não abre | Feche outros apps que usam a câmera; tente `CAMERA_BACKEND=msmf` ou outro `CAMERA_INDICE`. |
 | Celular não conecta | Mesmo Wi-Fi; permita o Python no firewall em "Redes privadas"; use o endereço `https://` do QR code. |
 | Sem voz | Sem internet a voz neural falha e ela usa a do Windows; instale a voz "Português (Brasil)" em Configurações → Hora e idioma → Fala. |
@@ -226,10 +272,11 @@ Os registros ficam em `dados/logs/sexta.log`.
 | `sexta/cerebro` | agente, cliente do Ollama, ferramentas, atalhos, memória |
 | `sexta/voz` | microfone, ativação, transcrição, fala |
 | `sexta/visao` | câmera compartilhada, rosto, mãos, prévia MJPEG |
-| `sexta/habilidades` | clima, notícias, Windows, apps, rotinas, lembretes, hologramas |
+| `sexta/habilidades` | clima, notícias, Windows, apps, rotinas, lembretes, hologramas, arquivos, janelas, visão, processos, configurações, área de transferência, terminal |
+| `sexta/atividades.py` | registro de atividades (holograma e `dados/atividades.jsonl`) |
 | `sexta/servidor.py` | API, WebSocket, segurança de acesso, HTTPS do celular |
 | `hud/` | interface (React + TypeScript + Tailwind + Three.js); `hud/dist` já vem compilado |
-| `config/` | rotinas e apelidos |
+| `config/` | rotinas, apelidos, layouts de janelas e comandos permitidos no terminal |
 | `dados/` | criado na primeira execução: preferências, rosto, lembretes, logs, modelos |
 
 ### Desenvolvimento
