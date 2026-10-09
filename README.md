@@ -21,7 +21,7 @@ Inspirada no projeto [vannu07/jarvis](https://github.com/vannu07/jarvis), reescr
 | **Rosto** | Cadastro de ~20 amostras em poses diferentes (só vetores numéricos ficam salvos, nenhuma foto). Com a proteção ligada, ela só obedece a você e exige uma piscada para desbloquear, então foto não engana. |
 | **Hologramas** | HUD 3D com núcleo animado e painéis: clima, notícias, sistema, relógio, globo, lembretes, rotinas, câmera, notas e prints. Você chama por voz ou pela barra lateral e mexe com as mãos, o mouse ou o toque. |
 | **Automações** | Abre apps (inclusive da Microsoft Store), sites e pastas; fecha programas; controla mídia e volume; tira print; bloqueia a tela; desliga/reinicia com confirmação; pesquisa e toca no YouTube. |
-| **Rotinas** | "Modo trabalho", "modo jogo", "bom dia"... sequências de ações num arquivo YAML, disparadas por frase ou por horário. Você também cria rotinas por voz. |
+| **Protocolos** | Automações com gatilho → condição → ação. Gatilhos: frase, horário, desbloquear o PC, abrir/fechar um app, bateria baixa, pendrive, arquivo novo numa pasta, rede Wi-Fi, voltar ao PC. Condições: dias, faixa de horário, em reunião, chovendo, rede. Crie por voz ("toda vez que eu abrir o Valorant, fecha o Chrome e coloca o PC no desempenho máximo"): ela mostra o protocolo e você aprova. |
 | **Lembretes e alarmes** | "Me lembra de ligar pro João amanhã às 10h", "me acorda às 7 todo dia útil", "timer de 15 minutos". |
 | **Celular** | Mesma interface no navegador do celular: segure para falar, escreva, toque nos atalhos, veja os painéis e ouça a resposta no próprio celular. |
 | **Memória** | "Lembra que meu time é o Cruzeiro" — ela guarda e usa nas próximas conversas. |
@@ -161,6 +161,37 @@ Ele precisa de uma câmera com infravermelho compatível (muitos notebooks já t
 O reconhecimento facial da Sexta-Feira é bom para o dia a dia, mas não substitui a segurança do Windows — mantenha uma senha ou PIN forte no sistema.
 
 ---
+
+## Protocolos (automações)
+
+Peça por voz e aprove:
+
+- "Sexta, toda vez que eu abrir o Valorant, fecha o Chrome e coloca o PC no desempenho máximo."
+- "Quando chegar um PDF em Downloads, me avisa no celular."
+- "Quando a bateria ficar abaixo de 15%, coloca no modo economia e baixa o brilho."
+- "Quando eu voltar ao PC, se não estiver em reunião, me dá o resumo do dia."
+
+Ela monta o protocolo, mostra no holograma (Quando / Se / Então) e só salva depois do seu "sim" (ou do botão **Aprovar**). Depois: "desativa o protocolo modo valorant", "apaga o protocolo...", "quais são meus protocolos?".
+
+No arquivo (`config/rotinas.yaml`), o formato completo é:
+
+```yaml
+rotinas:
+  modo valorant:
+    gatilhos:
+      - app_aberto: Valorant            # também: frase, horario, desbloquear, app_fechado,
+    condicoes:                          # bateria_baixa, pendrive, arquivo_novo, wifi, voltar_ao_pc
+      - entre: "18:00-23:59"            # também: dias, em_reuniao, chovendo, wifi
+      - em_reuniao: false
+    passos:
+      - fechar: Chrome
+      - plano_energia: desempenho maximo
+      - notificar: "Modo jogo ligado"   # vai para o celular
+```
+
+Textos podem usar `{app}`, `{arquivo}`, `{nome_arquivo}`, `{rede}`, `{bateria}`. "Em reunião" = outro programa usando o microfone (Teams, Zoom, Meet, Discord). "Voltar ao PC" usa o tempo sem mexer no mouse/teclado; em **Ajustes** dá para ligar a checagem pelo rosto na câmera (`presenca_camera`). Protocolos só disparam de novo depois de 1 minuto.
+
+**Notificar no celular:** chega nos celulares pareados com o HUD aberto. Para receber mesmo com o celular bloqueado, instale o app gratuito [ntfy](https://ntfy.sh), assine um tópico com nome difícil de adivinhar e coloque o mesmo nome em `NTFY_TOPICO` no `.env` (o texto da notificação passa pelo servidor do ntfy).
 
 ## Rotinas e apelidos
 

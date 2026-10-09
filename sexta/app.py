@@ -21,6 +21,7 @@ from .eventos import Barramento
 from .habilidades import registrar_ferramentas, windows
 from .habilidades.apps import CatalogoApps
 from .habilidades.arquivos import Arquivos
+from .habilidades.gatilhos import Vigia
 from .habilidades.clima import ServicoClima
 from .habilidades.hologramas import Hologramas
 from .habilidades.janelas import Layouts
@@ -71,6 +72,7 @@ class SextaFeira:
         self.layouts = Layouts(self, cfg.pasta_config / "layouts.yaml", cfg.pasta_config / "layouts_criados.yaml")
         self.terminal = Terminal(cfg.pasta_config / "terminal.yaml")
         self.atividades = Atividades(self, cfg.dados / "atividades.jsonl")
+        self.vigia = Vigia(self)
 
         self.registro = Registro()
         self.registro.ao_executar = self.atividades.anotar
@@ -239,6 +241,7 @@ class SextaFeira:
             threading.Thread(target=self._carregar_whisper, daemon=True).start()
         self.lembretes.iniciar()
         self.rotinas.iniciar(lambda: self.contexto("voz"))
+        self.vigia.iniciar()
         threading.Thread(target=self._vigiar_windows, name="vigia-windows", daemon=True).start()
         threading.Thread(target=self.apps.menu_iniciar, daemon=True).start()
         if windows.WINDOWS:
@@ -301,6 +304,7 @@ class SextaFeira:
                 self.sessao.bloquear("windows")
             else:
                 log.info("Windows desbloqueado")
+                self.rotinas.disparar("desbloquear")
                 if self.sessao.bloqueada:
                     threading.Thread(target=self.desbloquear_por_rosto, kwargs={"automatico": True}, daemon=True).start()
                 elif time.monotonic() - bloqueado_em > 60:  # só cumprimenta depois de uma ausência de verdade
@@ -317,7 +321,8 @@ class SextaFeira:
             return
         self._rodando = False
         log.info("Encerrando a Sexta-Feira")
-        for parar in (self.voz.parar, self.lembretes.parar, self.maos.desligar, self.fala.encerrar):
+        for parar in (self.voz.parar, self.lembretes.parar, self.vigia.parar, self.rotinas.parar, self.maos.desligar,
+                      self.fala.encerrar):
             try:
                 parar()
             except Exception:  # noqa: BLE001

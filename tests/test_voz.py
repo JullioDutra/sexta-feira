@@ -223,3 +223,43 @@ def test_interromper_enquanto_ela_fala(app, monkeypatch):
     voz.parar()
     assert pedidos == ["me conta uma história longa", "para e me diz as horas"]
     assert paradas  # a fala foi interrompida
+
+
+def test_efeito_traje_mantem_tamanho_e_volume():
+    import numpy as np
+
+    from sexta.voz.efeitos import para_wav, traje
+
+    taxa = 24000
+    t = np.arange(taxa * 2) / taxa
+    audio = (0.6 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+    saida = traje(audio, taxa)
+    assert saida.dtype == np.float32 and len(saida) == len(audio)
+    assert 0.5 < float(np.abs(saida).max()) <= 0.95
+    assert not np.allclose(saida, audio)
+    assert para_wav(saida, taxa)[:4] == b"RIFF"
+
+
+def test_perfil_de_voz_sexta(app):
+    from sexta.voz.fala import Fala
+
+    fala = Fala(app)
+    try:
+        app.prefs.atualizar({"voz": "sexta"})
+        assert fala.voz == "pt-BR-ThalitaMultilingualNeural" and fala._prosodia() == ("+4%", "-3Hz")
+        app.prefs.atualizar({"voz": "pt-BR-AntonioNeural"})
+        assert fala.voz == "pt-BR-AntonioNeural" and fala._prosodia() == (app.cfg.voz_velocidade, app.cfg.voz_tom)
+    finally:
+        fala.encerrar()
+
+
+def test_preferencia_antiga_migra_para_voz_sexta(tmp_path):
+    import json
+
+    from sexta.config import Preferencias
+
+    arquivo = tmp_path / "prefs.json"
+    arquivo.write_text(json.dumps({"voz": "", "nome": "Jullio"}), encoding="utf-8")
+    assert Preferencias(arquivo).get("voz") == "sexta"
+    arquivo.write_text(json.dumps({"voz": "pt-BR-AntonioNeural"}), encoding="utf-8")
+    assert Preferencias(arquivo).get("voz") == "pt-BR-AntonioNeural"

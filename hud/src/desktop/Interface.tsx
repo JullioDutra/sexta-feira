@@ -149,7 +149,7 @@ const DOCA: { tipo: TipoHolograma; rotulo: string }[] = [
   { tipo: "clima", rotulo: "Clima" },
   { tipo: "noticias", rotulo: "Notícias" },
   { tipo: "lembretes", rotulo: "Lembretes" },
-  { tipo: "rotinas", rotulo: "Rotinas" },
+  { tipo: "rotinas", rotulo: "Protocolos" },
   { tipo: "sistema", rotulo: "Sistema" },
   { tipo: "relogio", rotulo: "Relógio" },
   { tipo: "globo", rotulo: "Globo" },

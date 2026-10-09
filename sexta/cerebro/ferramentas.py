@@ -16,7 +16,7 @@ import json
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 log = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ class Contexto:
     cliente: Any = None
     resultados: list[dict] = field(default_factory=list)
     confiavel: bool = False     # rotinas e protocolos escritos pelo usuário: não pedem confirmação
+    confirmado: bool = False    # a ferramenta está rodando depois do "sim" do usuário
 
 
 @dataclass
@@ -163,7 +164,7 @@ class Registro:
         if nivel > LIVRE and not confirmado and not ctx.confiavel:
             return self._pedir_confirmacao(ferramenta, args, nivel, ctx)
         try:
-            resultado = ferramenta.funcao(ctx, **args)
+            resultado = ferramenta.funcao(replace(ctx, confirmado=True) if confirmado else ctx, **args)
         except Exception as erro:  # noqa: BLE001 - o erro vira resposta para a IA
             log.exception("Erro na ferramenta %s", nome)
             resultado = {"ok": False, "resumo": f"Erro ao executar {nome}: {erro}"}
@@ -180,6 +181,14 @@ class Registro:
         self._anotar({"ferramenta": nome, "argumentos": args, "nivel": nivel, "canal": ctx.canal,
                       "situacao": "ok" if resultado["ok"] else "falhou", "resumo": resultado["resumo"]})
         return resultado
+
+    def aguardar(self, nome: str, argumentos: dict[str, Any], descricao: str, ctx: Contexto,
+                 nivel: int = CONFIRMAR) -> None:
+        """Para ferramentas que montam a própria pergunta (ex.: aprovar um protocolo novo)."""
+        with self._lock:
+            self._pendente = Pendente(nome, argumentos, nivel, descricao, ctx.canal)
+        self._anotar({"ferramenta": nome, "argumentos": argumentos, "nivel": nivel, "canal": ctx.canal,
+                      "situacao": "aguardando", "resumo": descricao})
 
     def _pedir_confirmacao(self, ferramenta: Ferramenta, args: dict[str, Any], nivel: int, ctx: Contexto
                            ) -> dict[str, Any]:

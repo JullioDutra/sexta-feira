@@ -75,6 +75,10 @@ class Config:
     ollama_manter_carregado: str = "4h"  # quanto tempo o modelo fica na memória sem uso (evita recarregar)
     ollama_max_tokens_voz: int = 400
 
+    # Notificações no celular (opcional, app ntfy)
+    ntfy_topico: str = ""
+    ntfy_servidor: str = "https://ntfy.sh"
+
     # Arquivos
     pastas_arquivos: list[str] = field(default_factory=list)  # pastas extras para a busca de arquivos
 
@@ -144,6 +148,8 @@ class Config:
             ollama_manter_carregado=_env_str("OLLAMA_MANTER_CARREGADO", cls.ollama_manter_carregado),
             ollama_max_tokens_voz=_env_int("OLLAMA_MAX_TOKENS_VOZ", cls.ollama_max_tokens_voz),
             pastas_arquivos=_env_lista("PASTAS_ARQUIVOS"),
+            ntfy_topico=_env_str("NTFY_TOPICO"),
+            ntfy_servidor=_env_str("NTFY_SERVIDOR", cls.ntfy_servidor),
             porta=_env_int("PORTA", cls.porta),
             porta_https=_env_int("PORTA_CELULAR", cls.porta_https),
             liberar_rede=_env_bool("LIBERAR_CELULAR", cls.liberar_rede),
@@ -204,10 +210,12 @@ PREFERENCIAS_PADRAO: dict[str, Any] = {
     "continuacao_segundos": 6,
     "tema": "sexta",           # "sexta" (âmbar) ou "jarvis" (ciano)
     "maos_sensibilidade": 1.0,
-    "voz": "",                 # sobrescreve a voz do .env se preenchido
+    "voz": "sexta",            # "sexta" (perfil da assistente do traje), uma voz do edge-tts, ou "" (a do .env)
+    "voz_efeito": True,        # efeito "IA do traje" na voz
     "onboarding_concluido": False,
     "saudacao_ao_iniciar": True,
     "atalhos_rapidos": True,   # comandos simples sem passar pela IA (mais rápido)
+    "presenca_camera": False,  # protocolo "quando eu voltar ao PC": também procura seu rosto na câmera
 }
 
 # Preferências que o HUD pode alterar diretamente
@@ -226,6 +234,8 @@ class Preferencias:
             try:
                 salvos = json.loads(arquivo.read_text(encoding="utf-8"))
                 if isinstance(salvos, dict):
+                    if "voz_efeito" not in salvos and not salvos.get("voz"):
+                        salvos["voz"] = "sexta"  # quem usava a voz padrão passa para o perfil novo
                     self._dados.update(salvos)
             except (OSError, json.JSONDecodeError):
                 pass

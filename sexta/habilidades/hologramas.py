@@ -16,13 +16,13 @@ from . import sistema_info
 log = logging.getLogger(__name__)
 
 TIPOS = ["clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "texto",
-         "imagem"]
+         "imagem", "protocolo"]
 TITULOS = {
     "clima": "Clima", "noticias": "Notícias", "sistema": "Sistema", "relogio": "Relógio", "globo": "Globo",
-    "lembretes": "Lembretes", "rotinas": "Rotinas", "camera": "Câmera", "atividades": "Registro de atividades",
-    "texto": "Nota", "imagem": "Imagem",
+    "lembretes": "Lembretes", "rotinas": "Protocolos", "camera": "Câmera", "atividades": "Registro de atividades",
+    "texto": "Nota", "imagem": "Imagem", "protocolo": "Novo protocolo",
 }
-UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades"}
+UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "protocolo"}
 
 
 class Hologramas:

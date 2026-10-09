@@ -36,6 +36,7 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
 }
 
 const VOZES = [
+  { valor: "sexta", rotulo: "Sexta-Feira (assistente do traje)" },
   { valor: "", rotulo: "Padrão do arquivo .env" },
   { valor: "pt-BR-FranciscaNeural", rotulo: "Francisca (feminina)" },
   { valor: "pt-BR-ThalitaMultilingualNeural", rotulo: "Thalita (feminina)" },
@@ -216,6 +217,12 @@ export default function Ajustes({ aoFechar }: { aoFechar: () => void }) {
               ))}
             </select>
           </label>
+          <Chave
+            rotulo="Efeito de IA na voz"
+            descricao="Timbre de assistente do traje: um brilho metálico leve e a voz como se viesse de dentro do capacete."
+            ligado={prefs.voz_efeito}
+            aoMudar={(v) => mudar({ voz_efeito: v })}
+          />
           <Chave
             rotulo="Continuar ouvindo depois de responder"
             descricao='Por alguns segundos você pode falar de novo sem dizer "Sexta-Feira".'

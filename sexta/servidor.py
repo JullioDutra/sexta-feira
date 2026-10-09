@@ -410,6 +410,55 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             raise HTTPException(404, resultado.get("resumo"))
         return resultado
 
+    # -------------------------------------------------------------- protocolos (editor visual)
+    @api.get("/api/protocolos")
+    def protocolos(_: Cliente = Depends(autenticado)):
+        from .habilidades.rotinas import CATALOGO
+
+        return {"protocolos": [r.para_editor() for r in app.rotinas.listar()], "catalogo": CATALOGO,
+                "layouts": app.layouts.nomes()}
+
+    @api.put("/api/protocolos")
+    async def salvar_protocolo(request: Request, _: Cliente = Depends(so_pc)):
+        dados = await request.json()
+        try:
+            rotina = await asyncio.to_thread(app.rotinas.salvar_do_editor, dados, dados.get("nome_antigo") or None)
+        except ValueError as erro:
+            raise HTTPException(400, str(erro)) from None
+        app.atividades.anotar({"ferramenta": "editor_protocolos", "argumentos": {"nome": rotina.nome}, "nivel": 1,
+                               "situacao": "ok", "resumo": f"Protocolo {rotina.nome} salvo no editor.", "canal": "texto"})
+        return rotina.para_editor()
+
+    @api.post("/api/protocolos/{nome}/ativo")
+    async def ativar_protocolo(nome: str, request: Request, _: Cliente = Depends(so_pc)):
+        ativo = bool((await request.json()).get("ativo"))
+        if not await asyncio.to_thread(app.rotinas.definir_ativo, nome, ativo):
+            raise HTTPException(404, "Protocolo não encontrado.")
+        return {"ok": True}
+
+    @api.delete("/api/protocolos/{nome}")
+    async def apagar_protocolo(nome: str, _: Cliente = Depends(so_pc)):
+        if not await asyncio.to_thread(app.rotinas.apagar, nome):
+            raise HTTPException(400, "Só dá para apagar protocolos criados por voz ou no editor. "
+                                     "Os outros ficam em config/rotinas.yaml.")
+        return {"ok": True}
+
+    @api.post("/api/pendente")
+    async def responder_pendente(request: Request, cliente: Cliente = Depends(autenticado)):
+        """Botões Aprovar/Cancelar dos hologramas (mesmo efeito de dizer "sim" ou "não")."""
+        aprovar = bool((await request.json()).get("aprovar"))
+        if app.registro.pendente() is None:
+            raise HTTPException(404, "Não há nada esperando confirmação.")
+        if not aprovar:
+            pendente = app.registro.cancelar_pendente()
+            if pendente and pendente.nome == "criar_protocolo":
+                app.hologramas.fechar(tipo="protocolo")
+            return {"texto": "Cancelado."}
+        ctx = app.contexto("texto" if cliente.tipo == "pc" else "celular", cliente)
+        resultado = await asyncio.to_thread(app.registro.confirmar, ctx, app.verificar_para_acao)
+        app.barramento.publicar("aviso", nivel="sucesso" if resultado.get("ok") else "erro", texto=resultado["resumo"])
+        return {"texto": resultado["resumo"], "ok": resultado.get("ok")}
+
     @api.post("/api/rotinas/recarregar")
     def recarregar_rotinas(_: Cliente = Depends(so_pc)):
         app.rotinas.recarregar()

@@ -187,3 +187,62 @@ export function Atividades({ dados }: { dados: { itens?: Atividade[] } }) {
     </ol>
   );
 }
+
+interface Bloco {
+  tipo: string;
+  valor: unknown;
+  dias?: number[];
+}
+
+export function Protocolo({ dados }: { dados: { protocolo: { nome: string; gatilhos: Bloco[]; condicoes: Bloco[]; acoes: Bloco[] }; resumo: string } }) {
+  const avisar = useHud((s) => s.acoes.avisar);
+  const [enviando, setEnviando] = useState(false);
+  const p = dados?.protocolo;
+  if (!p) return null;
+  const responder = async (aprovar: boolean) => {
+    setEnviando(true);
+    try {
+      const r = await api<{ texto: string }>("/api/pendente", { method: "POST", json: { aprovar } });
+      avisar(r.texto, aprovar ? "sucesso" : "info");
+    } catch (e: any) {
+      avisar(e.message, "erro");
+    } finally {
+      setEnviando(false);
+    }
+  };
+  const valor = (b: Bloco) => (b.valor === true || b.valor === null || b.valor === "" ? "" : Array.isArray(b.valor) ? b.valor.join(", ") : String(b.valor));
+  const coluna = (titulo: string, blocos: Bloco[]) => (
+    <div className="min-w-0">
+      <h3 className="text-xs uppercase tracking-wider text-aco mb-1.5">{titulo}</h3>
+      {blocos.length ? (
+        <ul className="space-y-1.5">
+          {blocos.map((b, i) => (
+            <li key={i} className="border border-[var(--luz)]/35 rounded px-2 py-1.5 text-[13px] text-gelo">
+              <span className="text-[var(--luz)]">{b.tipo.replaceAll("_", " ")}</span> {valor(b)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-aco/70">sempre</p>
+      )}
+    </div>
+  );
+  return (
+    <div className="w-[460px]">
+      <div className="grid grid-cols-3 gap-3">
+        {coluna("Quando", p.gatilhos)}
+        {coluna("Se", p.condicoes)}
+        {coluna("Então", p.acoes)}
+      </div>
+      <p className="mt-3 text-xs text-aco leading-snug">{dados.resumo}</p>
+      <div className="mt-3 flex gap-2 justify-end">
+        <button type="button" data-clicavel disabled={enviando} onClick={() => responder(false)} className="px-4 py-1.5 rounded-full border border-aco/40 text-sm text-aco hover:text-gelo">
+          Cancelar
+        </button>
+        <button type="button" data-clicavel disabled={enviando} onClick={() => responder(true)} className="px-4 py-1.5 rounded-full border border-[var(--luz)] text-sm text-[var(--luz)] hover:bg-[rgb(var(--luz-rgb)/0.12)]">
+          Aprovar
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -12,7 +12,7 @@ from .clima import ErroClima, ServicoClima
 from .hologramas import TIPOS as TIPOS_HOLOGRAMA
 from .lembretes import REPETICOES
 from .noticias import CATEGORIAS, ErroNoticias
-from .rotinas import ACOES_SEGURAS
+from .rotinas import ACOES_SEGURAS, CONDICOES, GATILHOS
 
 log = logging.getLogger(__name__)
 
@@ -278,11 +278,12 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     # ------------------------------------------------------------------ rotinas
     @ferramenta(
         "rotina",
-        "Executa, lista, apaga ou recarrega (depois de editar os arquivos de rotinas, layouts, terminal) as rotinas — sequências de ações como "
+        "Protocolos e rotinas: executa, lista, apaga, ativa, desativa ou recarrega (depois de editar os arquivos de rotinas, layouts, terminal) as rotinas — sequências de ações como "
         "'modo trabalho' ou 'modo jogo'.",
         direta=True,
-        acao=P("string", "Ação.", enum=["executar", "listar", "apagar", "recarregar"], obrigatorio=True),
-        nome=P("string", "Nome da rotina."),
+        acao=P("string", "Ação.", enum=["executar", "listar", "apagar", "ativar", "desativar", "recarregar"],
+               obrigatorio=True),
+        nome=P("string", "Nome do protocolo/rotina."),
     )
     def rotina(ctx, acao: str, nome: str | None = None):
         rotinas = app.rotinas
@@ -305,6 +306,9 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         if alvo is None:
             disponiveis = ", ".join(r.nome for r in rotinas.listar()) or "nenhuma"
             return {"ok": False, "resumo": f"Não conheço a rotina '{nome}'. Disponíveis: {disponiveis}."}
+        if acao in ("ativar", "desativar"):
+            rotinas.definir_ativo(alvo.nome, acao == "ativar")
+            return {"ok": True, "resumo": f"Protocolo {alvo.nome} {'ativado' if acao == 'ativar' else 'desativado'}."}
         if acao == "apagar":
             if rotinas.apagar(alvo.nome):
                 return {"ok": True, "resumo": f"Rotina {alvo.nome} apagada."}
@@ -315,31 +319,51 @@ def registrar_ferramentas(app, registro: Registro) -> None:
                 "observacao": "A rotina já anuncia o que está fazendo; confirme em no máximo 3 palavras."}
 
     @ferramenta(
-        "criar_rotina",
-        "Cria uma rotina nova a pedido do usuário. Cada passo é {acao, valor}. Ações: falar (texto), abrir (app/site), "
-        "fechar (programa), tocar_youtube (busca), pesquisar (termo), volume (0-100 ou 'mudo'), midia "
-        "(tocar_pausar/proxima/anterior), esperar (segundos), clima, noticias, briefing, lembretes, holograma (tipo), "
-        "print, bloquear.",
+        "criar_protocolo",
+        "Cria um protocolo (automação) a pedido do usuário: 'toda vez que eu abrir o Valorant, fecha o Chrome e "
+        "coloca o PC no desempenho máximo'. Gatilhos: frase, horario (HH:MM), desbloquear, app_aberto, app_fechado, "
+        "bateria_baixa (%), pendrive, arquivo_novo (pasta), wifi (rede), voltar_ao_pc (minutos fora). Condições: "
+        "dias (seg..dom, uteis, fim de semana), entre ('18:00-23:00'), em_reuniao (true/false), chovendo "
+        "(true/false), wifi. Ações {acao, valor}: falar, notificar (no celular), abrir, fechar, layout, "
+        "minimizar_tudo, volume, midia, tocar_youtube, pesquisar, plano_energia, nao_perturbe, modo_escuro, brilho, "
+        "holograma, clima, noticias, briefing, lembretes, organizar_downloads, mover_arquivo (pasta; para "
+        "arquivo_novo), print, bloquear, esperar. Textos podem usar {app}, {nome_arquivo}, {rede}, {bateria}. "
+        "O usuário aprova antes de salvar.",
         direta=True,
-        nome=P("string", "Nome curto, ex.: 'modo estudo'.", obrigatorio=True),
-        passos=P("array", "Passos em ordem.", obrigatorio=True, itens={
+        nome=P("string", "Nome curto, ex.: 'modo valorant'.", obrigatorio=True),
+        gatilhos=P("array", "Quando o protocolo roda.", itens={
+            "type": "object",
+            "properties": {"tipo": {"type": "string", "enum": GATILHOS}, "valor": {"type": "string"},
+                           "dias": {"type": "array", "items": {"type": "string"}}},
+            "required": ["tipo"],
+        }),
+        condicoes=P("array", "Condições opcionais (todas precisam valer).", itens={
+            "type": "object",
+            "properties": {"tipo": {"type": "string", "enum": CONDICOES}, "valor": {"type": "string"}},
+            "required": ["tipo", "valor"],
+        }),
+        passos=P("array", "Ações em ordem.", obrigatorio=True, itens={
             "type": "object",
             "properties": {"acao": {"type": "string", "enum": ACOES_SEGURAS}, "valor": {"type": "string"}},
             "required": ["acao"],
         }),
-        frases=P("array", "Frases que disparam a rotina (além do nome).", itens={"type": "string"}),
-        horario=P("string", "Horário HH:MM para rodar sozinha (opcional)."),
-        dias=P("array", "Dias da semana para o horário: seg, ter, qua, qui, sex, sab, dom.", itens={"type": "string"}),
     )
-    def criar_rotina(ctx, nome: str, passos: list, frases: list | None = None, horario: str | None = None,
-                     dias: list | None = None):
+    def criar_protocolo(ctx, nome: str, passos: list, gatilhos: list | None = None, condicoes: list | None = None):
         try:
-            nova = app.rotinas.criar(nome, passos, frases, horario, dias)
+            rascunho = app.rotinas.rascunho(nome, passos, gatilhos=gatilhos, condicoes=condicoes)
         except ValueError as erro:
-            return {"ok": False, "resumo": str(erro)}
-        app.hologramas.mostrar("rotinas")
-        quando = f" Ela roda sozinha às {horario}." if horario else ""
-        return {"ok": True, "resumo": f"Rotina {nova.nome} criada com {len(nova.passos)} passos.{quando}"}
+            return {"ok": False, "resumo": str(erro), "_direta": False}
+        if ctx.confirmado:
+            salvo = app.rotinas.salvar(rascunho)
+            app.hologramas.fechar(tipo="protocolo")
+            app.hologramas.mostrar("rotinas")
+            return {"ok": True, "resumo": f"Protocolo {salvo.nome} ativo."}
+        app.hologramas.mostrar("protocolo", {"protocolo": rascunho.para_editor(), "resumo": rascunho.resumo()},
+                               titulo=f"Novo protocolo: {rascunho.nome}")
+        args = {"nome": nome, "passos": passos, "gatilhos": gatilhos or [], "condicoes": condicoes or []}
+        app.registro.aguardar("criar_protocolo", args, f"salvar o protocolo {rascunho.nome}", ctx)
+        return {"ok": False, "pendente": True,
+                "resumo": f"Montei o protocolo {rascunho.nome}: {rascunho.resumo()}. Aprova?"}
 
     # ------------------------------------------------------------------ hologramas
     @ferramenta(

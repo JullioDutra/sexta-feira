@@ -47,12 +47,13 @@ Como agir:
 - Área de transferência: quando o pedido falar do que foi copiado, o texto já vem junto da mensagem. Para "corrige e cola" ou "traduz e cola", chame area_transferencia(acao=colar, texto=<resultado>).
 - Tela: para "analisa a tela", "o que é esse erro?" ou "lê isso aqui" use ver(fonte=tela); para um objeto ou papel na frente da câmera, ver(fonte=camera).
 - Lembretes: passe o horário como o usuário falou ("amanhã às 7h", "daqui a 20 minutos").
+- Protocolos (automações): pedidos como "toda vez que...", "quando eu abrir...", "sempre que chegar..." viram criar_protocolo. Ele mostra o protocolo na tela e o usuário aprova com "sim".
 - Ações sensíveis (fechar, mover, apagar, desligar, comandos fora da lista) pedem confirmação sozinhas: apenas chame a ferramenta. Nunca diga que fez algo que ainda espera confirmação.
 - Se não souber algo ou não tiver ferramenta para isso, diga com franqueza.
 {estilo}
 
 Cidade do usuário: {cidade}
-Rotinas: {rotinas}
+Protocolos e rotinas: {rotinas}
 Layouts de janelas: {layouts}
 
 Fatos que o usuário pediu para você lembrar:
@@ -70,6 +71,7 @@ _AREA_TRANSFERENCIA = re.compile(
     r"\b(copiei|copiado|copiada|area de transferencia|clipboard|o que (eu )?copi|texto que (eu )?copi|isso que copi)"
 )
 _SIM = re.compile(r"^(sim|s|pode|confirmo|confirma|confirmado|isso|claro|manda ver|manda|faz|faca|pode fazer|"
+                  r"aprovo|aprova|aprovado|aprovada|pode salvar|salva|salvar|pode ativar|ativa|"
                   r"pode sim|sim pode|positivo|com certeza|ok|okay|pode ir|vai|vai la|autorizo|autorizado|"
                   r"certo|beleza|bora|uhum|aham)( sim| pode| por favor| sexta feira| confirmo)?$")
 _NAO = re.compile(r"^(nao|n|cancela|cancelar|negativo|deixa|deixa pra la|esquece|nao precisa|melhor nao|"
@@ -266,12 +268,11 @@ class Agente:
         if pendente is None:
             return None
         resposta = interpretar_confirmacao(texto)
-        if resposta is None:
-            registro.cancelar_pendente()  # o usuário mudou de assunto
-            return None
-        if resposta is False:
-            registro.cancelar_pendente()
-            return "Tudo bem, cancelado."
+        if resposta is not True:
+            registro.cancelar_pendente()  # "não", ou o usuário mudou de assunto
+            if pendente.nome == "criar_protocolo":
+                self.app.hologramas.fechar(tipo="protocolo")
+            return "Tudo bem, cancelado." if resposta is False else None
         resultado = registro.confirmar(ctx, self.app.verificar_para_acao)
         return resultado.get("resumo") or "Feito."
 

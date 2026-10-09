@@ -6,7 +6,7 @@ import { useHud } from "../lib/store";
 import type { Holograma } from "../lib/tipos";
 import Clima from "../holograms/Clima";
 import { GlifoTipo, Icone } from "../holograms/Glifos";
-import { Atividades, Lembretes, Rotinas } from "../holograms/Listas";
+import { Atividades, Lembretes, Protocolo, Rotinas } from "../holograms/Listas";
 import Noticias from "../holograms/Noticias";
 import Sistema from "../holograms/Sistema";
 import Orbe from "./Orbe";
@@ -189,6 +189,8 @@ function PainelMovel({ holo }: { holo: Holograma }) {
         return <Rotinas />;
       case "atividades":
         return <Atividades dados={holo.dados} />;
+      case "protocolo":
+        return <Protocolo dados={holo.dados} />;
       case "texto":
         return <p className="whitespace-pre-wrap text-gelo">{holo.dados?.texto}</p>;
       case "imagem":

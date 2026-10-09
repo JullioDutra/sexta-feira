@@ -10,6 +10,7 @@ export type TipoHolograma =
   | "rotinas"
   | "camera"
   | "atividades"
+  | "protocolo"
   | "texto"
   | "imagem";
 
@@ -38,6 +39,7 @@ export interface Preferencias {
   tema: "sexta" | "jarvis";
   maos_sensibilidade: number;
   voz: string;
+  voz_efeito: boolean;
   onboarding_concluido: boolean;
   saudacao_ao_iniciar: boolean;
   atalhos_rapidos: boolean;
@@ -61,6 +63,8 @@ export interface Rotina {
   passos: number;
   criada_pela_ia: boolean;
   acoes: string[];
+  ativo?: boolean;
+  gatilhos?: string[];
 }
 
 export interface LinhaConversa {

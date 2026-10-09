@@ -107,7 +107,7 @@ const NOMES_FERRAMENTAS: Record<string, string> = {
   criar_lembrete: "criando lembrete",
   gerenciar_lembretes: "vendo lembretes",
   rotina: "rotina",
-  criar_rotina: "criando rotina",
+  criar_protocolo: "montando protocolo",
   holograma: "projetando",
   memoria: "memória",
   assistente: "ajustando a mim mesma",
@@ -244,6 +244,21 @@ export function aplicarEvento(e: any): void {
       break;
     case "acesso":
       set({ pin: !!e.pin });
+      break;
+    case "rotinas":
+      set({ rotinas: e.rotinas });
+      break;
+    case "protocolo.disparado":
+      get().acoes.avisar(`Protocolo ${e.nome}: ${e.gatilho}`, "info");
+      break;
+    case "notificacao":
+      get().acoes.avisar(e.texto, "lembrete");
+      try {
+        navigator.vibrate?.([120, 60, 120]);
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification(e.titulo ?? "Sexta-Feira", { body: e.texto });
+      } catch {
+        /* sem suporte a notificações */
+      }
       break;
     default:
       break;
