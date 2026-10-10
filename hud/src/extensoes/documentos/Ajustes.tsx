@@ -13,6 +13,7 @@ export default function AjustesDocumentos() {
   const avisar = useHud((s) => s.acoes.avisar);
   const [estado, setEstado] = useState<EstadoMemoria | null>(null);
   const [pasta, setPasta] = useState("");
+  const [mudando, setMudando] = useState(false); // um clique duplo (ou pinça) não manda o pedido duas vezes
   // a leitura começa em segundo plano logo depois de um pedido: confere mais algumas vezes mesmo antes de ela aparecer
   const [conferir, setConferir] = useState(0);
 
@@ -35,7 +36,9 @@ export default function AjustesDocumentos() {
     return () => window.clearTimeout(espera);
   }, [estado, conferir, carregar]);
 
-  const mudarPasta = (acao: "adicionar" | "remover", caminho: string) =>
+  const mudarPasta = (acao: "adicionar" | "remover", caminho: string) => {
+    if (mudando) return;
+    setMudando(true);
     api<{ texto: string; estado: EstadoMemoria }>("/api/documentos/pastas", { method: "POST", json: { acao, pasta: caminho } })
       .then((r) => {
         setEstado(r.estado);
@@ -43,7 +46,9 @@ export default function AjustesDocumentos() {
         avisar(r.texto, "sucesso");
         if (acao === "adicionar") setPasta("");
       })
-      .catch((e) => avisar(e.message, "erro"));
+      .catch((e) => avisar(e.message, "erro"))
+      .finally(() => setMudando(false));
+  };
   const reindexar = () =>
     api<EstadoMemoria>("/api/documentos/indexar", { method: "POST" })
       .then((r) => {
@@ -77,8 +82,9 @@ export default function AjustesDocumentos() {
               <button
                 type="button"
                 aria-label={`Tirar ${p.caminho} da memória`}
+                disabled={mudando}
                 onClick={() => mudarPasta("remover", p.caminho)}
-                className="shrink-0 p-0.5 text-aco hover:text-coral"
+                className="shrink-0 p-0.5 text-aco hover:text-coral disabled:opacity-40"
               >
                 <Icone.Lixeira tamanho={16} />
               </button>
@@ -103,7 +109,7 @@ export default function AjustesDocumentos() {
             className="mt-0.5 block w-full bg-transparent border-b border-aco/50 py-1 text-gelo outline-none placeholder:text-aco/60 focus:border-[var(--luz)]"
           />
         </label>
-        <button type="submit" className="text-sm text-[var(--luz)] hover:text-gelo pb-1">
+        <button type="submit" disabled={mudando} className="text-sm text-[var(--luz)] hover:text-gelo pb-1 disabled:opacity-40">
           Adicionar
         </button>
       </form>

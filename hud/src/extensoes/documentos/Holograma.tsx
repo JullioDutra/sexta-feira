@@ -6,6 +6,8 @@ import { useHud } from "../../lib/store";
 import { Icone } from "../../holograms/Glifos";
 import { numero, type DadosDocumentos, type Fonte, type ResumoMemoria } from "./tipos";
 
+const MAX_PERGUNTA = 500; // o servidor corta no mesmo tamanho
+
 export default function HologramaDocumentos({ dados, largura = 460 }: { dados: DadosDocumentos; largura?: number }) {
   const noPc = useHud((s) => s.cliente?.tipo === "pc");
   const fontes = dados?.fontes ?? [];
@@ -58,6 +60,7 @@ function CartaoFonte({ fonte, indice, podeAbrir }: { fonte: Fonte; indice: numbe
               type="button"
               data-clicavel
               onClick={abrir}
+              aria-label={`Abrir ${fonte.arquivo}`}
               className="ml-auto shrink-0 inline-flex items-center gap-1 text-xs text-[var(--luz)] hover:text-gelo"
             >
               Abrir <Icone.Externo tamanho={12} />
@@ -127,6 +130,7 @@ function Perguntar() {
       <input
         value={pergunta}
         onChange={(e) => setPergunta(e.target.value)}
+        maxLength={MAX_PERGUNTA}
         placeholder="Pergunte aos seus documentos…"
         aria-label="Pergunta aos documentos"
         className="flex-1 min-w-0 bg-transparent border-b border-aco/40 py-1 text-sm text-gelo outline-none placeholder:text-aco/70 focus:border-[var(--luz)]"

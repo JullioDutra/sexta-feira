@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import threading
 import time
 from pathlib import Path, PureWindowsPath
 
@@ -135,6 +136,9 @@ def test_termos_da_pergunta_e_consulta_segura():
     assert mod.termos_da_pergunta("quanto paguei de IPTU em 2025") == [("paguei", True), ("iptu", True), ("2025", False)]
     assert mod._radical("aluguel") == mod._radical("alugueis") == "alugue"
     assert mod._radical("rescisao") == mod._radical("rescisoes") == "rescis"
+    assert mod._radical("fiadores") == mod._radical("fiador") == "fiador"  # "-es" do plural sai, senão não casa
+    assert mod._radical("valores") == "valor" and mod._radical("rapazes") == "rapaz"
+    assert mod._radical("analises").startswith("analis") and "analise".startswith(mod._radical("analises"))
     consulta = mod.consulta_fts(mod.termos_da_pergunta('multa" OR texto:* ) NEAR( "x" -iptu AND'))
     assert consulta == '"multa"* OR "or" OR "texto"* OR "near"* OR "iptu"* OR "and"'
     banco = sqlite3.connect(":memory:")
@@ -244,6 +248,87 @@ def test_arquivo_so_na_nuvem_nao_e_baixado(app, contratos, memoria, monkeypatch)
     assert lidos == []
     erro = next(e["erro"] for e in memoria.estado()["erros"] if e["caminho"] == caminho)
     assert "OneDrive" in erro
+
+
+def test_arquivo_so_na_nuvem_espera_ficar_no_pc(app, contratos, memoria, monkeypatch):
+    escrever(contratos / "nuvem.txt", "Apólice do seguro do carro.")
+    original = mod.varrer
+
+    def com_nuvem(raizes, atributos={"nuvem.txt": 0x400000}):
+        for caminho, mtime, tamanho, attr in original(raizes):
+            yield caminho, mtime, tamanho, attr | atributos.get(Path(caminho).name, 0)
+
+    gravados = []
+    gravar = memoria._indexar_arquivo
+    monkeypatch.setattr(mod, "varrer", com_nuvem)
+    monkeypatch.setattr(memoria, "_indexar_arquivo", lambda c, *a: gravados.append(Path(c).name) or gravar(c, *a))
+    assert memoria.indexar() and gravados == ["nuvem.txt"]
+    assert memoria.indexar() and gravados == ["nuvem.txt"]  # continua na nuvem: nada a regravar
+    monkeypatch.setattr(mod, "varrer", original)  # "Manter sempre neste dispositivo"
+    assert memoria.indexar() and gravados == ["nuvem.txt", "nuvem.txt"]
+    assert memoria.buscar("apólice do seguro")[0].arquivo == "nuvem.txt"
+
+
+def test_id_de_documento_esquecido_nao_volta(app, contratos, memoria):
+    ids = {t.arquivo: t.doc for t in memoria.buscar("multa IPTU geladeira")}
+    maior = max(ids.values())
+    alvo = next(nome for nome, doc in ids.items() if doc == maior)
+    (contratos / alvo).unlink()
+    assert memoria.indexar()  # esquece o de maior id
+    escrever(contratos / "novo.txt", "Recibo do conserto da geladeira.")
+    assert memoria.indexar()
+    novo = memoria.buscar("conserto")[0]
+    assert novo.arquivo == "novo.txt" and novo.doc > maior  # um cartão antigo do HUD não abre o arquivo novo
+
+
+def test_sem_pastas_nao_cria_o_banco(app, casa, memoria):
+    assert memoria.indexar() and not memoria.arquivo.exists()
+
+
+def test_indice_de_outro_esquema_e_refeito(app, casa, memoria):
+    memoria.arquivo.parent.mkdir(parents=True, exist_ok=True)
+    antigo = sqlite3.connect(memoria.arquivo)
+    antigo.executescript("CREATE TABLE docs (id INTEGER PRIMARY KEY, path TEXT); INSERT INTO docs VALUES (1, 'x');")
+    antigo.close()
+    estado = memoria.estado()
+    assert estado["erro_banco"] == "" and estado["documentos"] == 0
+
+
+def test_indice_danificado_aparece_no_estado(app, contratos, memoria):
+    outro = sqlite3.connect(memoria.arquivo)  # o banco estraga com a Sexta-Feira aberta
+    outro.execute("DROP TABLE docs")
+    outro.commit()
+    outro.close()
+    assert "danificado" in memoria.estado()["erro_banco"]
+    memoria.encerrar()
+    memoria.arquivo.write_bytes(b"isto nao e um banco sqlite" * 100)  # e na próxima vez que abre
+    for sufixo in ("-wal", "-shm"):
+        Path(f"{memoria.arquivo}{sufixo}").unlink(missing_ok=True)
+    assert "não consegui abrir" in memoria.estado()["erro_banco"]
+    item = mod.diagnostico(app)[0]
+    assert item["ok"] is False and "documentos.db" in item["dica"]
+
+
+def test_conexoes_abrem_juntas_num_banco_novo(app, tmp_path):
+    for n in range(30):  # ligar o WAL nas duas conexões ao mesmo tempo dava "database is locked"
+        memoria = mod.MemoriaDocumentos(app, tmp_path / f"d{n}.db")
+        barreira, erros = threading.Barrier(2), []
+
+        def usar(escrita):
+            barreira.wait()
+            try:
+                with memoria._banco(escrita=escrita) as db:
+                    db.execute("SELECT count(*) FROM docs").fetchone()
+            except mod.ErroDocumentos as erro:
+                erros.append(erro)
+
+        threads = [threading.Thread(target=usar, args=(e,)) for e in (True, False)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        memoria.encerrar()
+        assert erros == [] and memoria.erro_banco == ""
 
 
 def test_pasta_indisponivel_mantem_o_indice(app, contratos, memoria):
@@ -369,6 +454,8 @@ def test_resolver_pasta_por_nome(casa):
     ("D:\\", "não o disco inteiro"),
     (r"D:\Program Files\App", "pastas do sistema"),
     (r"E:\$RECYCLE.BIN\x", "pastas do sistema"),
+    (r"C:\Users\Ana\.ssh", "ocultas"),
+    (r"D:\Backup\.git\objetos", "ocultas"),
 ])
 def test_motivo_recusa_no_windows(caminho, motivo):
     resultado = mod.motivo_recusa(PureWindowsPath(caminho), PureWindowsPath(r"C:\Users\Ana"), "C:")
@@ -396,6 +483,21 @@ def test_validar_pasta_recusa_fora_de_casa(casa, tmp_path):
         mod.validar_pasta(str(casa))
     with pytest.raises(mod.ErroDocumentos, match="Não encontrei"):
         mod.validar_pasta(str(casa / "Documents" / "nada"))
+    (casa / ".ssh").mkdir()
+    with pytest.raises(mod.ErroDocumentos, match="ocultas"):
+        mod.validar_pasta(str(casa / ".ssh"))
+    with pytest.raises(mod.ErroDocumentos, match="Não consegui abrir"):
+        mod.validar_pasta("~usuario_que_nao_existe/Documentos")
+
+
+def test_caminho_digitado_no_chat(app, casa, memoria):
+    pasta = casa / "Documents" / "Meus_Contratos-2024"
+    pasta.mkdir()
+    agente = sem_ia(app)
+    assert agente.processar(f"usa a pasta {pasta} como memória", canal="texto")["caminho"] == "atalho"
+    assert app.prefs.get("documentos_pastas") == [str(pasta)]
+    resposta = agente.processar(f"tira a pasta {pasta} da memória", canal="texto")["texto"]
+    assert resposta == "Tirei a pasta Meus_Contratos-2024 da memória dos documentos."
 
 
 def test_pasta_mae_substitui_as_de_dentro(app, casa, memoria):
@@ -465,6 +567,25 @@ def test_atalho_abre_o_holograma(app, casa, memoria):
         "holograma", {"acao": "mostrar", "tipo": "documentos"})
 
 
+def test_atalho_documento_publico_so_com_posse_ou_arquivo(app, contratos):
+    rodar = lambda nome, args, padrao=None: (nome, args)
+    ctx = Contexto(app)
+    assert mod.atalho("o que diz o estatuto do idoso sobre aposentadoria", ctx, rodar, None) is None
+    assert mod.atalho("no regulamento do concurso qual a nota minima", ctx, rodar, None) is None
+    assert mod.atalho("o que diz meu regulamento sobre a piscina", ctx, rodar, None)[0] == "documentos"
+    escrever(contratos / "regulamento_condominio.txt", "A piscina abre às 8h.")
+    assert app.documentos.indexar()
+    assert mod.atalho("no regulamento do condominio qual o horario da piscina", ctx, rodar, None)[0] == "documentos"
+
+
+def test_palavra_curta_so_casa_o_nome_inteiro(app, contratos):
+    escrever(contratos / "leilao_carro.txt", "Lance mínimo de R$ 20.000.")
+    assert app.documentos.indexar()
+    rodar = lambda nome, args, padrao=None: (nome, args)
+    assert mod.atalho("o que diz a lei sobre heranca", Contexto(app), rodar, None) is None
+    assert mod.atalho("o que diz o leilao sobre o lance", Contexto(app), rodar, None)[0] == "documentos"
+
+
 def test_atalho_pelo_nome_de_um_documento(app, contratos):
     ctx = Contexto(app)
     rodar = lambda nome, args, padrao=None: (nome, args)
@@ -479,6 +600,8 @@ def test_atalho_pelo_nome_de_um_documento(app, contratos):
     "mostra os meus documentos recentes", "pesquisa receita de pão de queijo", "o que diz o jornal sobre o Cruzeiro",
     "o que fala a bíblia sobre perdão", "acha o contrato de aluguel", "anota: renovar o seguro", "que horas são",
     "me avisa quando sair notícia de RTX 60", "coloca o vs code na esquerda", "o que está pesando no pc?",
+    "anota comprar pão", "lê esse documento aqui", "abre a pasta documentos", "pesquisa contrato de aluguel",
+    "organiza meus downloads", "o que diz a previsão sobre amanhã", "procura no google modelo de contrato",
 ])
 def test_atalho_nao_engole_comandos_do_nucleo(app, contratos, frase):
     t = normalizar(frase)
@@ -528,6 +651,7 @@ def test_rotas_de_ajustes(app, casa, memoria, api):
 
 def test_rota_abrir_so_documentos_indexados(app, contratos, memoria, api, monkeypatch):
     assert api.post("/api/documentos/abrir", json={"id": "x"}).status_code == 400
+    assert api.post("/api/documentos/abrir", json={"id": 10**30}).status_code == 400  # não estoura no SQLite
     assert api.post("/api/documentos/abrir", json={"id": 999}).status_code == 404
     doc = next(t.doc for t in memoria.buscar("multa") if t.arquivo == "contrato_aluguel.pdf")
     assert api.post("/api/documentos/abrir", json={"id": doc}).status_code == 501  # fora do Windows
