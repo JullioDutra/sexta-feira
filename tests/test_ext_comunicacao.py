@@ -306,11 +306,22 @@ def conversa(app, monkeypatch):
     """Modo tradutor com microfone, Whisper e cérebro simulados."""
     app.voz.mic_ok = True
     ouvidos: list[tuple[str, str]] = []  # o que o "Whisper" devolve, em ordem: (texto, idioma)
-    monkeypatch.setattr(app.transcritor, "transcrever_idioma",
-                        lambda audio, idioma=None, candidatos=(), dica="": ouvidos.pop(0))
+    modos: list[str] = []  # como cada fala foi transcrita: "detectar" o idioma ou como "pedido" em português
+
+    def transcrever_idioma(audio, idioma=None, candidatos=(), dica=""):
+        modos.append("detectar")
+        return ouvidos.pop(0)
+
+    def transcrever(audio, dica=""):
+        modos.append("pedido")
+        return ouvidos.pop(0)[0]
+
+    monkeypatch.setattr(app.transcritor, "transcrever_idioma", transcrever_idioma)
+    monkeypatch.setattr(app.transcritor, "transcrever", transcrever)
     traducoes = {"Bom dia, tudo bem?": '"Good morning, how are you?"', "I'm fine, thanks.": "Estou bem, obrigado.",
                  "Chega.": "Enough.", "Onde fica a estação?": "¿Dónde está la estación?",
-                 "Sexta-feira de manhã.": "Friday morning."}
+                 "Sexta-feira de manhã.": "Friday morning.", "お元気ですか？": "Tudo bem com você?",
+                 "Muito bem, obrigado.": "とても元気です、ありがとう。"}
     pedidos: list[tuple[str, str]] = []
 
     def completar(sistema, texto, rapido=True):
@@ -318,7 +329,7 @@ def conversa(app, monkeypatch):
         return traducoes[texto]
 
     monkeypatch.setattr(app.agente, "completar", completar)
-    return SimpleNamespace(ouvidos=ouvidos, pedidos=pedidos)
+    return SimpleNamespace(ouvidos=ouvidos, pedidos=pedidos, modos=modos)
 
 
 def ligar(app, idioma: str = "inglês") -> dict:
@@ -344,6 +355,15 @@ def test_conversa_nos_dois_sentidos(app, conversa):
     linhas = holograma["dados"]["linhas"]
     assert [(l["de"], l["para"], l["traducao"]) for l in linhas] == [
         ("pt", "en", "Good morning, how are you?"), ("en", "pt", "Estou bem, obrigado.")]  # a mais nova embaixo
+
+
+def test_conversa_em_japones_nao_e_descartada(app, conversa):
+    ligar(app, "japonês")
+    conversa.ouvidos += [("お元気ですか？", "ja"), ("Muito bem, obrigado.", "pt")]
+    app.voz._escuta_continua(SILENCIO, False)
+    app.voz._escuta_continua(SILENCIO, False)
+    assert app.fala.falas[-2:] == ["Tudo bem com você?", "とても元気です、ありがとう。"]
+    assert app.fala.vozes[-2:] == [None, "ja-JP-NanamiNeural"]
 
 
 @pytest.mark.parametrize("fala", ["Sexta-Feira, para de traduzir.", "Sair do tradutor", "Sexta-feira, chega."])
@@ -404,18 +424,53 @@ def pedidos_ao_cerebro(app, monkeypatch) -> list[str]:
 
 def test_chamada_no_meio_da_fala_dela_para_o_tradutor(app, conversa, pedidos_ao_cerebro):
     ligar(app)
-    conversa.ouvidos.append(("you today? Sexta-feira, para de traduzir.", "en"))  # o começo é o eco dela
+    conversa.ouvidos.append(("you today? Sexta-feira, para de traduzir.", "pt"))  # o começo é o eco dela
     app.voz._escuta_continua(SILENCIO, True)
     assert app.tradutor.alvo is None and conversa.pedidos == [] and pedidos_ao_cerebro == []
+    assert conversa.modos == ["pedido"]  # em português: a detecção erraria por causa do eco em inglês
 
 
 def test_chamada_com_outro_pedido_vai_para_o_cerebro(app, conversa, pedidos_ao_cerebro):
     ligar(app)
-    conversa.ouvidos += [("morning. Sexta-feira, que horas são?", "pt"), ("Sexta-Feira.", "pt")]
+    conversa.ouvidos += [("morning. Sexta-feira, que horas são?", "pt"), ("Sexta-Feira.", "pt"),
+                         ("Que dia é hoje?", "pt"), ("Bom dia, tudo bem?", "pt")]
     app.voz._escuta_continua(SILENCIO, True)
-    app.voz._escuta_continua(SILENCIO, True)  # só o nome: ninguém traduz "Friday"
-    assert pedidos_ao_cerebro == ["que horas são?"] and conversa.pedidos == []
-    assert app.tradutor.alvo is not None  # o modo tradutor continua
+    app.voz._escuta_continua(SILENCIO, True)  # só o nome: ninguém traduz "Friday", ela atende
+    assert app.fala.falas[-1] == "Pois não?"
+    app.voz._escuta_continua(SILENCIO, False)  # a resposta ao "Pois não?" é um pedido
+    app.voz._escuta_continua(SILENCIO, False)  # e depois a conversa segue traduzida
+    assert pedidos_ao_cerebro == ["que horas são?", "Que dia é hoje?"]
+    assert conversa.modos == ["pedido", "pedido", "pedido", "detectar"]
+    assert app.fala.falas[-1] == "Good morning, how are you?" and app.tradutor.alvo is not None
+
+
+def test_so_o_nome_sem_interromper_tambem_e_atendido(app, conversa, pedidos_ao_cerebro):
+    ligar(app)
+    conversa.ouvidos += [("Sexta-Feira?", "pt"), ("para", "pt")]
+    app.voz._escuta_continua(SILENCIO, False)
+    assert app.fala.falas[-1] == "Pois não?" and conversa.pedidos == []
+    app.voz._escuta_continua(SILENCIO, False)  # "para" depois do "Pois não?" desliga, não vira "stop"
+    assert app.tradutor.alvo is None and conversa.pedidos == []
+
+
+def test_espera_pelo_pedido_tem_prazo(app, conversa):
+    ligar(app)
+    conversa.ouvidos += [("Sexta-Feira.", "pt"), ("Bom dia, tudo bem?", "pt")]
+    app.voz._escuta_continua(SILENCIO, False)
+    app.tradutor._chamada_ate = time.monotonic() - 1  # ninguém pediu nada a tempo
+    app.voz._escuta_continua(SILENCIO, False)
+    assert app.fala.falas[-1] == "Good morning, how are you?"
+
+
+def test_nome_com_o_alarme_tocando_desliga_o_alarme(app, conversa, monkeypatch):
+    ligar(app)
+    parados = []
+    monkeypatch.setattr(app.lembretes, "alarme_ativo", lambda: not parados)
+    monkeypatch.setattr(app.lembretes, "parar_alarme", lambda: parados.append(True))
+    conversa.ouvidos.append(("Sexta-Feira, para!", "pt"))
+    app.voz._escuta_continua(SILENCIO, False)
+    assert parados and app.fala.falas[-1] == "Alarme desligado."
+    assert app.tradutor.alvo is not None and conversa.pedidos == []  # o modo tradutor continua
 
 
 def test_esc_no_hud_desliga(app, conversa):
@@ -577,6 +632,45 @@ def test_botao_de_falar_marca_so_a_proxima_fala_como_pedido(app, monkeypatch):
         voz.escutar_continuamente(None)
         voz.parar()
     assert [chamada for _audio, chamada in ouvidos] == [True, False]
+
+
+def test_botao_de_falar_durante_a_espera_marca_a_fala_seguinte(app, monkeypatch):
+    monkeypatch.setattr(modulo_voz, "ESPERA_CONTINUA_S", 0.2)  # várias voltas sem ninguém falar
+    voz = iniciar_voz(app, monkeypatch, [])
+    ouvidos = []
+    voz.escutar_continuamente(coletor(ouvidos))
+    voz.iniciar()
+    try:
+        time.sleep(0.3)
+        voz.ativar()  # aperta o botão e demora a falar
+        time.sleep(0.6)
+        for b in FALA * 2:
+            voz.mic.fila.put(b)
+        assert esperar(lambda: len(ouvidos) == 2)
+    finally:
+        voz.escutar_continuamente(None)
+        voz.parar()
+    assert [chamada for _audio, chamada in ouvidos] == [True, False]
+
+
+def test_chamada_com_o_alarme_tocando_desliga_o_alarme(app, monkeypatch):
+    falando = threading.Event()
+    falando.set()
+    monkeypatch.setattr(app.fala, "falando_ou_na_fila", falando.is_set)
+    monkeypatch.setattr(app.fala, "parar", falando.clear)
+    parados = []
+    monkeypatch.setattr(app.lembretes, "alarme_ativo", lambda: not parados)
+    monkeypatch.setattr(app.lembretes, "parar_alarme", lambda: parados.append(True))
+    voz = iniciar_voz(app, monkeypatch, [bloco(1000)] * 30 + [bloco(9000)] * 3 + [bloco(0)] * 40)  # alarme e o nome
+    ouvidos = []
+    voz.escutar_continuamente(coletor(ouvidos))
+    voz.iniciar()
+    try:
+        assert esperar(lambda: parados)
+    finally:
+        voz.escutar_continuamente(None)
+        voz.parar()
+    assert app.fala.falas == ["Alarme desligado."] and ouvidos == []
 
 
 def test_chamada_no_meio_da_fala_dela_vira_pedido(app, monkeypatch):

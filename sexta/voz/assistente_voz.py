@@ -112,11 +112,18 @@ class AssistenteVoz:
                         self.detector.reiniciar()
                     self.mic.esvaziar()
 
+    def _desligar_alarme(self) -> bool:
+        """ "Sexta-Feira!" com o alarme tocando = desligar o alarme. True se havia um alarme tocando."""
+        app = self.app
+        if not app.lembretes.alarme_ativo():
+            return False
+        app.lembretes.parar_alarme()
+        app.fala.falar("Alarme desligado.")
+        return True
+
     def _atender(self, pre_rolagem: list[bytes]) -> None:
         app = self.app
-        if app.lembretes.alarme_ativo():  # "Sexta-Feira!" com o alarme tocando = desligar o alarme
-            app.lembretes.parar_alarme()
-            app.fala.falar("Alarme desligado.")
+        if self._desligar_alarme():
             return
         if app.fala.falando_ou_na_fila():
             app.fala.parar()
@@ -159,18 +166,23 @@ class AssistenteVoz:
         """Uma volta da escuta contínua: espera ela terminar de falar, grava a próxima fala e a entrega."""
         app = self.app
         pre: list[bytes] = []
-        chamada = self._ptt.is_set()  # botão de falar no HUD: a próxima fala é um pedido para ela
-        self._ptt.clear()
+        interrompida = False
         if app.fala.falando_ou_na_fila():
-            if self._esperar_fala_ou_interrupcao():
-                pre, chamada = list(self._anel), True  # disse "Sexta-Feira" no meio da fala dela: o pedido já começou
-            else:
-                self._limpar_eco()
+            interrompida = self._esperar_fala_ou_interrupcao()
+            if interrompida:
+                pre = list(self._anel)  # disse "Sexta-Feira" no meio da fala dela: o pedido já começou
             self._anel.clear()
+            if not interrompida:
+                self._limpar_eco()
+            elif self._desligar_alarme():
+                return
         app.estado.definir("ouvindo")
         try:
             audio = self._gravar(pre, espera=ESPERA_CONTINUA_S, desistir_se_ela_tocar=True)
             if audio is not None and self._escuta_continua is ao_ouvir:
+                # o botão de falar, apertado antes ou durante esta fala, faz dela um pedido
+                chamada = interrompida or self._ptt.is_set()
+                self._ptt.clear()
                 app.estado.definir("pensando")
                 ao_ouvir(audio, chamada)
         except Exception:  # noqa: BLE001
