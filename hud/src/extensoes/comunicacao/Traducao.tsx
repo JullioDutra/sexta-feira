@@ -64,7 +64,7 @@ function Cabecalho({ dados }: { dados: DadosTraducao }) {
   );
 }
 
-function Fala({ linha, conversa }: { linha: Linha; conversa: boolean }) {
+function ItemTraducao({ linha, conversa }: { linha: Linha; conversa: boolean }) {
   return (
     <li className="py-2.5 border-t border-aco/15 first:border-t-0">
       {conversa && (
@@ -97,7 +97,7 @@ export function Traducao({ dados }: { dados: DadosTraducao }) {
       {linhas.length ? (
         <ol ref={lista} className="mt-2 max-h-[360px] overflow-y-auto rolagem pr-1 -mr-1" aria-live="polite">
           {linhas.map((l) => (
-            <Fala key={l.id} linha={l} conversa={conversa} />
+            <ItemTraducao key={l.id} linha={l} conversa={conversa} />
           ))}
         </ol>
       ) : (

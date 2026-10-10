@@ -80,7 +80,7 @@ class Transcritor:
         with self._lock:
             segmentos, info = self._decodificar(audio, idioma, dica)
             if idioma is None and candidatos and info.language not in candidatos:
-                # os segmentos só são decodificados quando lidos: refazer com o idioma certo não desperdiça a decodificação
+                # os segmentos só são decodificados quando lidos: refazer com o idioma certo não desperdiça trabalho
                 segmentos, info = self._decodificar(audio, _mais_provavel(info.all_language_probs, candidatos), dica)
             textos = [seg.text.strip() for seg in segmentos if not (seg.no_speech_prob > 0.75 and seg.avg_logprob < -0.8)]
         texto = " ".join(t for t in textos if t).strip()

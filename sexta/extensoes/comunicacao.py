@@ -175,7 +175,7 @@ class Tradutor:
         self._ultimo_alvo = IDIOMAS["en"]
         self._linhas: deque[dict] = deque(maxlen=self.LINHAS_MAX)
         self._ids = itertools.count(1)
-        self._holograma: dict = {"modo": "voz", "ativo": False, "idioma": "", "codigo": "", "linhas": []}
+        self._holograma = self._dados_conversa()
 
     @property
     def alvo(self) -> Idioma | None:
@@ -208,11 +208,12 @@ class Tradutor:
 
     def desligar(self) -> dict:
         with self._lock:
-            ligado, self._alvo = self._alvo is not None, None
+            if self._alvo is None:
+                return {"ok": False, "resumo": "O modo tradutor já está desligado."}
+            self._alvo = None
             self.app.voz.escutar_continuamente(None)
-        if not ligado:
-            return {"ok": False, "resumo": "O modo tradutor já está desligado."}
-        self._mostrar_conversa(abrir=False)
+            self._holograma = dados = {**self._holograma, "ativo": False}
+        self.app.hologramas.atualizar_tipo("traducao", dados)
         return {"ok": True, "resumo": "Modo tradutor desligado."}
 
     def _ao_ouvir(self, audio: np.ndarray) -> None:
@@ -254,15 +255,15 @@ class Tradutor:
         self.app.fala.falar(self.ligar(idioma)["resumo"])
         return True
 
-    def _mostrar_conversa(self, abrir: bool = True) -> None:
+    def _dados_conversa(self) -> dict:
+        idioma = self._alvo or self._ultimo_alvo
+        return {"modo": "voz", "ativo": self._alvo is not None, "idioma": idioma.nome, "codigo": idioma.codigo,
+                "linhas": list(self._linhas)}
+
+    def _mostrar_conversa(self) -> None:
         with self._lock:
-            idioma = self._alvo or self._ultimo_alvo
-            self._holograma = dados = {"modo": "voz", "ativo": self._alvo is not None, "idioma": idioma.nome,
-                                       "codigo": idioma.codigo, "linhas": list(self._linhas)}
-        if abrir:
-            self.app.hologramas.mostrar("traducao", dados, titulo=f"Tradutor · português ⇄ {idioma.nome}")
-        else:
-            self.app.hologramas.atualizar_tipo("traducao", dados)
+            self._holograma = dados = self._dados_conversa()
+        self.app.hologramas.mostrar("traducao", dados, titulo=f"Tradutor · português ⇄ {dados['idioma']}")
 
     # -- traduções avulsas ------------------------------------------------------------------------
     def traduzir_tela(self, idioma: Idioma | None = None) -> dict:

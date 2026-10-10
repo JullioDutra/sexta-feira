@@ -597,6 +597,22 @@ def test_traduz_a_pagina_para_outro_idioma(app, tela):
         "id": 0, "de": "", "para": "es", "original": "", "traducao": "Bienvenido"}
 
 
+def test_resumo_falado_da_tela_e_curto():
+    texto = "\n".join(f"Linha {i} de um artigo comprido sobre tradução" for i in range(20))
+    trecho = comunicacao._inicio(texto)
+    assert trecho.startswith("Linha 0 de um artigo comprido sobre tradução. Linha 1") and len(trecho) <= 160
+
+
+def test_desligar_o_tradutor_mantem_a_tela_traduzida(app, tela):
+    app.voz.mic_ok = True
+    ligar(app)
+    tela.agente.processar("traduz a tela")
+    assert app.hologramas.lista()[-1]["dados"]["ativo"] is True  # o botão "Parar tradutor" continua à mão
+    tela.agente.processar("para de traduzir")
+    dados = app.hologramas.lista()[-1]["dados"]
+    assert dados["modo"] == "tela" and dados["ativo"] is False and app.tradutor.alvo is None
+
+
 def test_tela_indisponivel(app, tela, monkeypatch):
     def falhar():
         raise OSError("sem monitor")

@@ -440,10 +440,7 @@ class Agente:
         self._salvar_historico()
 
     def _sistema(self, ctx: Contexto) -> str:
-        """Prompt de sistema estável (sem hora): permite o cache de prompt do Ollama.
-
-        A personalidade só muda o texto quando o usuário troca de personalidade.
-        """
+        """Prompt de sistema estável (sem hora): permite o cache de prompt do Ollama."""
         prefs = self.app.prefs
         nome = prefs.get("nome") or "seu usuário"
         rotinas = ", ".join(r.nome for r in self.app.rotinas.listar()) or "nenhuma"
