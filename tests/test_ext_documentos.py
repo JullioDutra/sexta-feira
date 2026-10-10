@@ -368,6 +368,21 @@ def test_validar_pasta_recusa_fora_de_casa(casa, tmp_path):
         mod.validar_pasta(str(casa / "Documents" / "nada"))
 
 
+def test_pasta_mae_substitui_as_de_dentro(app, casa, memoria):
+    (casa / "Documents" / "Contratos").mkdir()
+    mod.adicionar_pasta(app, "Documentos/Contratos")
+    assert "Pronto" in mod.adicionar_pasta(app, "Documentos")
+    assert app.prefs.get("documentos_pastas") == [str(casa / "Documents")]
+    assert "dentro de Documents" in mod.adicionar_pasta(app, "Documentos/Contratos")
+
+
+def test_preferencia_malformada_nao_quebra(app, casa, memoria):
+    app.prefs.atualizar({"documentos_pastas": 5})
+    assert memoria.pastas_configuradas() == []
+    app.prefs.atualizar({"documentos_pastas": ["", 3, str(casa / "Documents")]})
+    assert [p["caminho"] for p in memoria.pastas_configuradas()] == [str(casa / "Documents")]
+
+
 def test_pastas_do_env_entram_mas_nao_saem_por_voz(app, casa, memoria, monkeypatch):
     monkeypatch.setenv("DOCUMENTOS_PASTAS", f"Documentos, {casa / 'Desktop'}")
     assert [p["origem"] for p in memoria.pastas_configuradas()] == ["env", "env"]
@@ -400,9 +415,26 @@ def test_atalhos_de_pergunta(app, casa, memoria, monkeypatch, frase):
     assert args["pergunta"] == frase.removeprefix("Sexta-feira, ")
 
 
+@pytest.mark.parametrize("frase,args", [
+    ("reindexa os meus documentos", {"acao": "indexar"}),
+    ("atualiza a memória dos documentos", {"acao": "indexar"}),
+    ("usa a pasta Documentos barra Contratos como memória", {"acao": "adicionar_pasta", "pasta": "documentos barra contratos"}),
+    ("remove a pasta contratos da memória dos documentos", {"acao": "remover_pasta", "pasta": "contratos"}),
+])
+def test_atalhos_de_pastas(app, casa, memoria, frase, args):
+    rodar = lambda nome, a, padrao=None: (nome, a)
+    assert mod.atalho(normalizar(frase), Contexto(app), rodar, frase) == ("documentos", args)
+
+
+def test_atalho_abre_o_holograma(app, casa, memoria):
+    rodar = lambda nome, a, padrao=None: (nome, a)
+    assert mod.atalho("abre a memoria dos documentos", Contexto(app), rodar, None) == (
+        "holograma", {"acao": "mostrar", "tipo": "documentos"})
+
+
 def test_atalho_pelo_nome_de_um_documento(app, contratos):
     ctx = Contexto(app)
-    rodar = lambda nome, args, padrao=None: (nome, args)  # noqa: E731
+    rodar = lambda nome, args, padrao=None: (nome, args)
     assert mod.atalho("o que diz meu iptu sobre o valor", ctx, rodar, None) == (
         "documentos", {"acao": "perguntar", "pergunta": "o que diz meu iptu sobre o valor"})
     assert mod.atalho("o que diz o jornal sobre o cruzeiro", ctx, rodar, None) is None

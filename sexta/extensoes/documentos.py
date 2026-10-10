@@ -20,11 +20,11 @@ import re
 import sqlite3
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePath
-from typing import Iterator
 
 from ..cerebro.ferramentas import P
 from ..habilidades import windows
@@ -105,6 +105,7 @@ _PASTA = r"(?:a |minha )?pasta (?:de |do |da |dos |das )?(.+?)"
 _USAR_PASTA = re.compile(r"^(?:usa|use|usar|coloca|coloque|poe|bota|adiciona|adicione|adicionar|inclui|inclua|incluir) "
                          rf"(?:tambem )?{_PASTA} (?:como|na|no|a|para a|pra) memoria(?: (?:dos|de) documentos)?$")
 _TIRAR_PASTA = re.compile(rf"^(?:tira|tire|tirar|remove|remova|remover) {_PASTA} da memoria(?: (?:dos|de) documentos)?$")
+_MOSTRAR = re.compile(r"^(?:abre|abrir|mostra|mostrar|exibe) (?:a )?memoria (?:dos|de) documentos$")
 _RELER = re.compile(r"^(?:reindexa|reindexar|atualiza|atualizar|rele|reler) (?:a )?memoria (?:dos|de) documentos$|"
                     r"^(?:reindexa|reindexar|rele|reler) (?:os )?(?:meus )?documentos$")
 
@@ -178,8 +179,11 @@ def _extrair_pdf(caminho: Path) -> Lido:
             log.debug("Página %d de %s ilegível", numero, caminho.name)
     if not any(t.strip() for _, t in textos):
         raise ErroLeitura("PDF sem texto (escaneado?)")
-    titulo = (leitor.metadata.title if leitor.metadata else None) or ""
-    return Lido(str(titulo), total, textos)
+    try:
+        titulo = str((leitor.metadata.title if leitor.metadata else None) or "")
+    except Exception:  # noqa: BLE001 - metadados quebrados não invalidam o texto
+        titulo = ""
+    return Lido(titulo, total, textos)
 
 
 def _extrair_docx(caminho: Path) -> Lido:
@@ -273,9 +277,12 @@ def pastas_env() -> list[str]:
 
 
 def _lista_de_textos(valor) -> list[str]:
+    """A preferência pode chegar malformada pelo HUD: aceita só textos."""
     if isinstance(valor, str):
         valor = [valor]
-    return [str(v).strip() for v in valor or [] if isinstance(v, str) and v.strip()]
+    if not isinstance(valor, (list, tuple)):
+        return []
+    return [v.strip() for v in valor if isinstance(v, str) and v.strip()]
 
 
 def _partes_da_pasta(texto: str) -> list[str]:
@@ -390,9 +397,11 @@ def varrer(raizes: list[Path]) -> Iterator[tuple[str, float, int]]:
             except OSError:
                 continue
             for entrada in entradas:
-                if entrada.name.startswith((".", "~", "$")) or entrada.is_symlink():
-                    continue  # ocultos, temporários do Office e atalhos que poderiam levar para fora da pasta
+                if entrada.name.startswith((".", "~", "$")):
+                    continue  # ocultos, temporários do Office e lixeira
                 try:
+                    if entrada.is_symlink():
+                        continue  # poderia levar para fora da pasta escolhida
                     info = entrada.stat(follow_symlinks=False)
                     if getattr(info, "st_file_attributes", 0) & ATRIBUTO_OCULTO_OU_SISTEMA:
                         continue
@@ -528,7 +537,8 @@ class MemoriaDocumentos:
             db.executescript(ESQUEMA)
         except sqlite3.Error as erro:
             db.close()
-            self.erro_banco = f"o SQLite deste Python não tem a busca de texto FTS5 ({erro})"
+            self.erro_banco = ("o SQLite deste Python não tem a busca de texto FTS5" if "fts5" in str(erro).lower()
+                               else f"não consegui abrir {self.arquivo.name} ({erro})")
             raise ErroDocumentos(f"A memória dos documentos não funciona aqui: {self.erro_banco}.") from erro
         self.erro_banco = ""
         return db
@@ -838,7 +848,7 @@ def adicionar_pasta(app, texto: str) -> str:
     dona = next((r for r in raizes if pasta.is_relative_to(r)), None)
     if dona is not None:
         return f"A pasta {pasta.name} já está na memória dos documentos" + ("." if dona == pasta else f", dentro de {dona.name}.")
-    _publicar_pastas(app, atuais + [str(pasta)])
+    _publicar_pastas(app, [p for p in atuais if not Path(p).is_relative_to(pasta)] + [str(pasta)])  # a nova engloba as de dentro
     return f"Pronto: a pasta {pasta.name} entrou na memória dos documentos. Vou ler os arquivos em segundo plano."
 
 
@@ -911,6 +921,8 @@ def atalho(t: str, ctx, rodar, original: str | None):
         return rodar("documentos", {"acao": "remover_pasta", "pasta": m.group(1)})
     if _RELER.match(t):
         return rodar("documentos", {"acao": "indexar"})
+    if _MOSTRAR.match(t):
+        return rodar("holograma", {"acao": "mostrar", "tipo": "documentos"})
     return None
 
 
@@ -984,7 +996,7 @@ def diagnostico(app) -> list[dict]:
     estado = app.documentos.estado()
     if estado["erro_banco"]:
         return [{"nome": nome, "ok": False, "detalhe": estado["erro_banco"],
-                 "dica": "Use o Python oficial do python.org (o SQLite dele tem FTS5)"}]
+                 "dica": "Apague dados/documentos.db (o índice é refeito sozinho) ou use o Python oficial do python.org"}]
     if not estado["pastas"]:
         return [{"nome": nome, "ok": True, "detalhe": "nenhuma pasta escolhida",
                  "dica": "Ajustes → Memória dos documentos, ou diga: usa a pasta Documentos como memória"}]
