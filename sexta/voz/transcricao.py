@@ -63,8 +63,8 @@ class Transcritor:
             raise RuntimeError(f"Não foi possível carregar o Whisper: {ultimo_erro}")
 
     def transcrever(self, audio: np.ndarray, dica: str = "") -> str:
-        """``audio``: float32 mono 16 kHz, falado em português."""
-        return self.transcrever_idioma(audio, "pt", dica=dica)[0]
+        """Comando em português. ``audio``: float32 mono 16 kHz."""
+        return self.transcrever_idioma(audio, "pt", dica=dica or DICA_PADRAO)[0]
 
     def transcrever_idioma(self, audio: np.ndarray, idioma: str | None = None, candidatos: Sequence[str] = (),
                            dica: str = "") -> tuple[str, str]:
@@ -72,6 +72,7 @@ class Transcritor:
 
         Com ``idioma=None`` o Whisper detecta a língua; ``candidatos`` (ex.: ``("pt", "en")`` no modo
         tradutor) limita a detecção a esses idiomas, o que evita confundir português com espanhol ou galego.
+        ``dica``: texto que orienta o vocabulário (o mesmo idioma da fala).
         """
         if audio.size < 16000 * 0.25:
             return "", idioma or ""
@@ -97,7 +98,7 @@ class Transcritor:
             vad_parameters={"min_silence_duration_ms": 400},
             condition_on_previous_text=False,
             without_timestamps=True,
-            initial_prompt=dica or (DICA_PADRAO if idioma == "pt" else None),
+            initial_prompt=dica or None,
             no_speech_threshold=0.6,
         )
 

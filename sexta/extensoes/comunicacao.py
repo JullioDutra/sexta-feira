@@ -80,8 +80,8 @@ _ESTILOS = {"formal": "formal", "educada": "formal", "educado": "formal", "amiga
             "sarcastico": "sarcastica", "sarcasmo": "sarcastica"}
 _ESTILO = "(?P<estilo>" + "|".join(_ESTILOS) + ")"
 # "modo X" só com estes três estilos: "modo foco", "modo jogo" e "modo escuro" continuam com o núcleo
-_MODO_PERSONALIDADE = re.compile(r"^(?:(?:ativa|ativar|liga|ligar|entra no|entrar no|volta pro|volta para o|muda pro|"
-                                 r"muda para o|coloca no|usa o) )?modo " + _ESTILO + "$")
+_MODO_PERSONALIDADE = re.compile(r"^(?:(?:ativa|ativar|liga|ligar|usa|usar) (?:o )?|(?:entra|entrar|volta|voltar|muda|"
+                                 r"mudar|coloca|passa) (?:no|pro|pra|para o) )?modo " + _ESTILO + "$")
 _PEDIDOS_PERSONALIDADE = (
     re.compile(r"^(?:fica|fique|seja|pode ser|pode ficar|volta a ser|fala|fale)(?: mais| um pouco mais| bem)? "
                + _ESTILO + "$"),
