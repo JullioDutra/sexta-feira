@@ -6,6 +6,7 @@ import asyncio
 import threading
 import time
 from types import SimpleNamespace
+from typing import Callable
 
 import numpy as np
 import pytest
@@ -20,11 +21,31 @@ from sexta.voz import fala as modulo_fala
 from sexta.voz.audio import tom
 from sexta.voz.transcricao import DICA_PADRAO, Transcritor
 
+from conftest import FalaFalsa
 from test_agente import OllamaFalso, cliente
 from test_voz import DetectorFalso, MicrofoneFalso, ReprodutorFalso, bloco
 
 SILENCIO = np.zeros(16000, dtype=np.float32)
 AVA = "en-US-AvaMultilingualNeural"
+
+
+class FalaComVozes(FalaFalsa):
+    """A voz falsa dos testes, guardando também a voz pedida para cada fala (None = a da Sexta-Feira)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.vozes: list[str | None] = []
+
+    def falar(self, texto: str, voz: str | None = None) -> None:
+        if texto and texto.strip():
+            self.vozes.append(voz)
+        super().falar(texto)
+
+
+@pytest.fixture
+def app(app):
+    app.fala = FalaComVozes()
+    return app
 
 
 def sem_ia(app):
@@ -119,6 +140,12 @@ def test_obrigado_conforme_a_personalidade(app, estilo, esperadas):
     assert resposta["caminho"] == "atalho" and resposta["texto"] in esperadas
 
 
+def test_preferencias_estranhas_nao_quebram_o_prompt(app):
+    app.prefs.atualizar({"personalidade": ["formal"], "tratamento": 42})  # JSON editado à mão ou HUD com defeito
+    sistema = app.agente._sistema(app.contexto())
+    assert "humor leve e seco" in sistema and 'Trate o usuário por "42"' in sistema
+
+
 def test_cancelamento_continua_claro_em_toda_personalidade(app, monkeypatch):
     fechados = []
     monkeypatch.setattr(app.apps, "fechar", lambda nome: (fechados.append(nome), (True, "ok"))[1])
@@ -200,6 +227,7 @@ ATALHOS_DO_NUCLEO = [
     ("planeja meu dia", "planejar", {"acao": "dia"}),
     ("abre o jornal", "jornal", {"acao": "mostrar"}),
     ("ativa o modo escuro", "configuracao", {"item": "modo_escuro", "valor": "ligar"}),
+    ("anota comprar pão", "tarefas", {"acao": "criar", "titulo": "comprar pão"}),
 ]
 
 
@@ -209,6 +237,11 @@ def test_frases_do_nucleo_nao_sao_capturadas(app):
 
     capturadas = [f for f in FRASES_DO_NUCLEO if comunicacao.atalho(normalizar(f), app.contexto(), rodar, f) is not None]
     assert capturadas == []
+
+
+def test_que_horas_sao_continua_sem_ia(app):
+    resposta = sem_ia(app).processar("que horas são")
+    assert resposta["caminho"] == "atalho" and resposta["texto"].startswith("São ")
 
 
 def test_nucleo_continua_com_os_mesmos_atalhos(app, monkeypatch):
@@ -259,7 +292,8 @@ def test_idioma_desconhecido_fica_com_a_ia(app):
 
 
 @pytest.mark.parametrize("nome,codigo", [("inglês", "en"), ("o Inglês", "en"), ("castelhano", "es"), ("mandarim", "zh"),
-                                         ("ja", "ja"), ("klingon", None), ("", None)])
+                                         ("ja", "ja"), ("en-US", "en"), ("zh_CN", "zh"), ("português do Brasil", "pt"),
+                                         ("inglês americano", "en"), ("klingon", None), ("o", None), ("", None)])
 def test_idioma_por_nome(nome, codigo):
     idioma = comunicacao.idioma_por_nome(nome)
     assert (idioma.codigo if idioma else None) == codigo
@@ -275,7 +309,8 @@ def conversa(app, monkeypatch):
     monkeypatch.setattr(app.transcritor, "transcrever_idioma",
                         lambda audio, idioma=None, candidatos=(), dica="": ouvidos.pop(0))
     traducoes = {"Bom dia, tudo bem?": '"Good morning, how are you?"', "I'm fine, thanks.": "Estou bem, obrigado.",
-                 "Chega.": "Enough.", "Onde fica a estação?": "¿Dónde está la estación?"}
+                 "Chega.": "Enough.", "Onde fica a estação?": "¿Dónde está la estación?",
+                 "Sexta-feira de manhã.": "Friday morning."}
     pedidos: list[tuple[str, str]] = []
 
     def completar(sistema, texto, rapido=True):
@@ -296,8 +331,8 @@ def test_conversa_nos_dois_sentidos(app, conversa):
     ouvir = app.voz._escuta_continua
     assert ouvir is not None
     conversa.ouvidos += [("Bom dia, tudo bem?", "pt"), ("I'm fine, thanks.", "en")]
-    ouvir(SILENCIO)
-    ouvir(SILENCIO)
+    ouvir(SILENCIO, False)
+    ouvir(SILENCIO, False)
 
     assert app.fala.falas == ["Good morning, how are you?", "Estou bem, obrigado."]
     assert app.fala.vozes == [AVA, None]  # voz nativa no inglês; a dela no português
@@ -316,7 +351,7 @@ def test_sair_do_tradutor_por_voz(app, conversa, fala):
     ligar(app)
     ouvir = app.voz._escuta_continua
     conversa.ouvidos.append((fala, "pt"))
-    ouvir(SILENCIO)
+    ouvir(SILENCIO, False)
     assert app.tradutor.alvo is None and app.voz._escuta_continua is None
     assert app.fala.falas[-1] == "Modo tradutor desligado."
     assert conversa.pedidos == []  # o pedido de parar não foi traduzido
@@ -326,17 +361,61 @@ def test_sair_do_tradutor_por_voz(app, conversa, fala):
 def test_sem_o_nome_uma_palavra_solta_e_traduzida(app, conversa):
     ligar(app)
     conversa.ouvidos.append(("Chega.", "pt"))
-    app.voz._escuta_continua(SILENCIO)
+    app.voz._escuta_continua(SILENCIO, False)
     assert app.tradutor.alvo is not None and app.fala.falas[-1] == "Enough."
 
 
 def test_trocar_de_idioma_sem_sair(app, conversa):
     ligar(app)
     conversa.ouvidos += [("Sexta-Feira, modo tradutor para espanhol", "pt"), ("Onde fica a estação?", "pt")]
-    app.voz._escuta_continua(SILENCIO)
+    app.voz._escuta_continua(SILENCIO, False)
     assert app.fala.falas[-1] == "Agora traduzo entre português e espanhol."
-    app.voz._escuta_continua(SILENCIO)
+    app.voz._escuta_continua(SILENCIO, False)
     assert app.fala.falas[-1] == "¿Dónde está la estación?" and app.fala.vozes[-1] == "es-ES-ElviraNeural"
+
+
+def test_parar_vale_mesmo_se_o_whisper_errar_o_idioma(app, conversa):
+    ligar(app, "espanhol")
+    conversa.ouvidos.append(("Sexta-Feira, para de traduzir.", "es"))  # frase curta confundida com espanhol
+    app.voz._escuta_continua(SILENCIO, False)
+    assert app.tradutor.alvo is None and conversa.pedidos == []
+
+
+def test_nome_no_comeco_da_conversa_continua_sendo_traduzido(app, conversa):
+    ligar(app)
+    conversa.ouvidos.append(("Sexta-feira de manhã.", "pt"))  # resposta a "quando?", não um pedido
+    app.voz._escuta_continua(SILENCIO, False)
+    assert app.fala.falas[-1] == "Friday morning." and app.tradutor.alvo is not None
+
+
+def test_so_pontuacao_nao_e_traduzida(app, conversa):
+    ligar(app)
+    conversa.ouvidos.append(("...", "pt"))
+    app.voz._escuta_continua(SILENCIO, False)
+    assert conversa.pedidos == []
+
+
+@pytest.fixture
+def pedidos_ao_cerebro(app, monkeypatch) -> list[str]:
+    pedidos: list[str] = []
+    monkeypatch.setattr(app.agente, "processar", lambda texto, canal="voz", **_k: pedidos.append(texto))
+    return pedidos
+
+
+def test_chamada_no_meio_da_fala_dela_para_o_tradutor(app, conversa, pedidos_ao_cerebro):
+    ligar(app)
+    conversa.ouvidos.append(("you today? Sexta-feira, para de traduzir.", "en"))  # o começo é o eco dela
+    app.voz._escuta_continua(SILENCIO, True)
+    assert app.tradutor.alvo is None and conversa.pedidos == [] and pedidos_ao_cerebro == []
+
+
+def test_chamada_com_outro_pedido_vai_para_o_cerebro(app, conversa, pedidos_ao_cerebro):
+    ligar(app)
+    conversa.ouvidos += [("morning. Sexta-feira, que horas são?", "pt"), ("Sexta-Feira.", "pt")]
+    app.voz._escuta_continua(SILENCIO, True)
+    app.voz._escuta_continua(SILENCIO, True)  # só o nome: ninguém traduz "Friday"
+    assert pedidos_ao_cerebro == ["que horas são?"] and conversa.pedidos == []
+    assert app.tradutor.alvo is not None  # o modo tradutor continua
 
 
 def test_esc_no_hud_desliga(app, conversa):
@@ -349,6 +428,12 @@ def test_esc_no_hud_desliga(app, conversa):
     assert asyncio.run(comunicacao.mensagem_ws(app, None, None, parar, None))  # Esc de novo: nada a avisar
     assert avisos == ["Modo tradutor desligado."]
     assert not asyncio.run(comunicacao.mensagem_ws(app, None, None, {"tipo": "outro"}, None))
+
+
+def test_parar_ignora_o_idioma(app, conversa):
+    ligar(app)
+    resposta = app.registro.executar("traducao", {"acao": "parar", "idioma": "klingon"}, app.contexto())
+    assert resposta["ok"] and app.tradutor.alvo is None
 
 
 def test_tradutor_precisa_do_microfone_e_de_outro_idioma(app):
@@ -378,7 +463,7 @@ def test_falha_na_traducao_avisa(app, conversa, monkeypatch):
     app.barramento.ouvir(lambda e: e["tipo"] == "aviso" and avisos.append(e["texto"]))
     ligar(app)
     conversa.ouvidos.append(("Bom dia, tudo bem?", "pt"))
-    app.voz._escuta_continua(SILENCIO)
+    app.voz._escuta_continua(SILENCIO, False)
     assert app.fala.falas[-1] == "Não consegui traduzir essa. Pode repetir?"
     assert avisos == ["Não consegui traduzir: Ollama fora do ar"]
 
@@ -393,7 +478,7 @@ def test_desligado_enquanto_traduzia_nao_fala(app, conversa, monkeypatch):
 
     monkeypatch.setattr(app.agente, "completar", completar_e_desligar)
     conversa.ouvidos.append(("Bom dia, tudo bem?", "pt"))
-    ouvir(SILENCIO)
+    ouvir(SILENCIO, False)
     assert "Good morning." not in app.fala.falas
 
 
@@ -405,6 +490,9 @@ def test_encerrar_desliga_o_tradutor(app, conversa):
 
 # ---------------------------------------------------------------- laço de voz
 
+FALA = [bloco(0)] * 5 + [bloco(3000)] * 20 + [bloco(0)] * 40  # alguém fala uma frase e para
+
+
 def iniciar_voz(app, monkeypatch, roteiro):
     voz = modulo_voz.AssistenteVoz(app)
     voz.mic = MicrofoneFalso(roteiro)
@@ -412,19 +500,25 @@ def iniciar_voz(app, monkeypatch, roteiro):
     return voz
 
 
+def coletor(ouvidos: list) -> Callable:
+    """Callback da escuta contínua que guarda (áudio, chamada)."""
+    return lambda audio, chamada: ouvidos.append((audio, chamada))
+
+
 def test_escuta_continua_dispensa_a_palavra_de_ativacao(app, monkeypatch):
-    voz = iniciar_voz(app, monkeypatch, [bloco(0)] * 5 + [bloco(3000)] * 20 + [bloco(0)] * 60)
+    voz = iniciar_voz(app, monkeypatch, FALA)
     pedidos = []
     monkeypatch.setattr(app.agente, "processar", lambda *a, **k: pedidos.append(a))
     ouvidos = []
-    voz.escutar_continuamente(ouvidos.append)
+    voz.escutar_continuamente(coletor(ouvidos))
     voz.iniciar()
     try:
         assert esperar(lambda: ouvidos)
     finally:
         voz.escutar_continuamente(None)
         voz.parar()
-    assert ouvidos[0].dtype == np.float32 and float(np.abs(ouvidos[0]).max()) > 0.05
+    audio, chamada = ouvidos[0]
+    assert audio.dtype == np.float32 and float(np.abs(audio).max()) > 0.05 and chamada is False
     assert pedidos == []  # nada foi tratado como comando
 
 
@@ -434,7 +528,7 @@ def test_escuta_continua_nao_grava_a_propria_voz(app, monkeypatch):
     monkeypatch.setattr(app.fala, "falando_ou_na_fila", falando.is_set)
     voz = iniciar_voz(app, monkeypatch, [bloco(3000)] * 20 + [bloco(0)] * 20)  # o eco da tradução que ela fala
     ouvidos = []
-    voz.escutar_continuamente(ouvidos.append)
+    voz.escutar_continuamente(coletor(ouvidos))
     voz.iniciar()
     try:
         time.sleep(0.4)
@@ -458,7 +552,7 @@ def test_pedido_que_liga_o_tradutor_encerra_o_atendimento(app, monkeypatch):
 
     def processar(texto, canal="voz", **_k):
         pedidos.append(texto)
-        voz.escutar_continuamente(ouvidos.append)
+        voz.escutar_continuamente(coletor(ouvidos))
 
     monkeypatch.setattr(app.agente, "processar", processar)
     app.prefs.atualizar({"modo_continuacao": True})
@@ -469,6 +563,55 @@ def test_pedido_que_liga_o_tradutor_encerra_o_atendimento(app, monkeypatch):
         voz.escutar_continuamente(None)
         voz.parar()
     assert pedidos == ["modo tradutor para inglês"]  # a frase seguinte foi para o tradutor, não virou pedido
+
+
+def test_botao_de_falar_marca_so_a_proxima_fala_como_pedido(app, monkeypatch):
+    voz = iniciar_voz(app, monkeypatch, FALA * 2)
+    ouvidos = []
+    voz.escutar_continuamente(coletor(ouvidos))
+    voz.ativar()  # botão de falar no HUD
+    voz.iniciar()
+    try:
+        assert esperar(lambda: len(ouvidos) == 2)
+    finally:
+        voz.escutar_continuamente(None)
+        voz.parar()
+    assert [chamada for _audio, chamada in ouvidos] == [True, False]
+
+
+def test_chamada_no_meio_da_fala_dela_vira_pedido(app, monkeypatch):
+    falando = threading.Event()
+    falando.set()
+    monkeypatch.setattr(app.fala, "falando_ou_na_fila", falando.is_set)
+    monkeypatch.setattr(app.fala, "parar", falando.clear)
+    # ~1 s do eco da tradução que ela fala (passa da carência do detector), "Sexta-Feira" (som forte) e o pedido
+    voz = iniciar_voz(app, monkeypatch, [bloco(1000)] * 30 + [bloco(9000)] * 3 + [bloco(3000)] * 20 + [bloco(0)] * 40)
+    ouvidos = []
+    voz.escutar_continuamente(coletor(ouvidos))
+    voz.iniciar()
+    try:
+        assert esperar(lambda: ouvidos)
+    finally:
+        voz.escutar_continuamente(None)
+        voz.parar()
+    assert not falando.is_set() and ouvidos[0][1] is True  # ela parou de falar e a fala é um pedido
+
+
+def gravar(voz, tocando: list[bool]):
+    """Grava uma fala com ``fala.falando()`` devolvendo, em ordem, os valores de ``tocando``."""
+    voz._rodando = True
+    estados = iter(tocando)
+    voz.app.fala.falando = lambda: next(estados, tocando[-1])
+    return voz._gravar([], espera=3.0, desistir_se_ela_tocar=True)
+
+
+def test_gravacao_desiste_quando_ela_comeca_a_tocar(app, monkeypatch):
+    voz = iniciar_voz(app, monkeypatch, FALA)
+    assert gravar(voz, [False] * 10 + [True]) is None  # um lembrete começou a tocar no meio da fala
+    voz.mic = MicrofoneFalso(FALA)
+    assert gravar(voz, [True] * 3 + [False]) is not None  # o fim de uma fala que ela acabou de interromper
+    voz.mic = MicrofoneFalso(FALA)
+    assert gravar(voz, [False]) is not None
 
 
 # ---------------------------------------------------------------- transcrição com idioma
@@ -518,8 +661,8 @@ def test_voz_por_frase_tem_cache_proprio_e_mantem_o_efeito(app, monkeypatch):
     try:
         pedidos = []
 
-        async def edge(texto, voz, velocidade, tom_voz):
-            pedidos.append((voz, velocidade, tom_voz))
+        async def edge(texto, perfil=None):
+            pedidos.append(perfil or fala._perfil(None))
             return b"mp3"
 
         monkeypatch.setattr(fala, "_edge_bytes", edge)
@@ -531,6 +674,8 @@ def test_voz_por_frase_tem_cache_proprio_e_mantem_o_efeito(app, monkeypatch):
         audio, _taxa = fala._sintetizar("Hello.", AVA)  # do cache
         assert pedidos == [(AVA, "+0%", "+0Hz"), ("pt-BR-ThalitaMultilingualNeural", "+4%", "-3Hz")]
         assert audio[0] == 1.0  # o efeito do traje vale também para a voz do tradutor
+        assert fala.gerar_audio("Bom dia.")  # o áudio do celular continua com a voz dela
+        assert pedidos[-1] == ("pt-BR-ThalitaMultilingualNeural", "+4%", "-3Hz")
 
         sintetizados = []
         monkeypatch.setattr(fala, "_sintetizar",
@@ -597,6 +742,11 @@ def test_traduz_a_pagina_para_outro_idioma(app, tela):
         "id": 0, "de": "", "para": "es", "original": "", "traducao": "Bienvenido"}
 
 
+def test_marcas_da_tela_em_markdown():
+    resposta = "**ORIGINAL:**\nWelcome back\n\n## TRADUÇÃO:\nBem-vindo de volta"
+    assert comunicacao._separar_tela(resposta) == ("Welcome back", "Bem-vindo de volta")
+
+
 def test_resumo_falado_da_tela_e_curto():
     texto = "\n".join(f"Linha {i} de um artigo comprido sobre tradução" for i in range(20))
     trecho = comunicacao._inicio(texto)
@@ -661,6 +811,13 @@ def test_area_de_transferencia_vazia(app, copiado):
 # ---------------------------------------------------------------- protocolos, diagnóstico e holograma
 
 def test_protocolo_com_personalidade_e_tradutor(app):
+    from sexta.habilidades import rotinas
+
+    opcoes = next(a["opcoes"] for a in rotinas.CATALOGO["acoes"] if a["tipo"] == "personalidade")
+    assert opcoes == ["formal", "amigável", "sarcástica"]  # o editor de protocolos mostra com acento
+    app.rotinas.criar("sarcasmo", [{"acao": "personalidade", "valor": "sarcástica"}])
+    app.rotinas._executar(app.rotinas.obter("sarcasmo"), app.contexto())
+    assert app.prefs.get("personalidade") == "sarcastica"
     app.voz.mic_ok = True
     app.rotinas.criar("reuniao internacional", [{"acao": "personalidade", "valor": "formal"},
                                                 {"acao": "tradutor", "valor": "inglês"}])

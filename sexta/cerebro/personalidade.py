@@ -55,13 +55,13 @@ RESPOSTAS: dict[str, dict[str, tuple[str, ...]]] = {
 
 
 def atual(prefs) -> str:
-    valor = prefs.get("personalidade")
-    return valor if valor in ESTILOS else PADRAO
+    valor = prefs.get("personalidade")  # vem do JSON (HUD ou edição à mão): pode ter qualquer tipo
+    return valor if isinstance(valor, str) and valor in ESTILOS else PADRAO
 
 
 def tratamento(prefs) -> str:
     """Como chamar o usuário. No modo formal, o "chefe" padrão vira "senhor" (outro tratamento escolhido vale)."""
-    escolhido = (prefs.get("tratamento") or "").strip() or "chefe"
+    escolhido = str(prefs.get("tratamento") or "").strip() or "chefe"
     return "senhor" if escolhido.lower() == "chefe" and atual(prefs) == "formal" else escolhido
 
 

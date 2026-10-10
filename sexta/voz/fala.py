@@ -146,7 +146,7 @@ class Fala:
         if not texto or self.app.cfg.voz_motor == "windows":
             return None
         try:
-            mp3 = asyncio.run(asyncio.wait_for(self._edge_bytes(texto, *self._perfil(None)), timeout=20))
+            mp3 = asyncio.run(asyncio.wait_for(self._edge_bytes(texto), timeout=20))
         except Exception as erro:  # noqa: BLE001
             log.warning("Não consegui gerar o áudio para o celular: %s", erro)
             return None
@@ -173,9 +173,11 @@ class Fala:
     def _executar(self, coro):
         return self._loop.run_until_complete(asyncio.wait_for(coro, timeout=20))
 
-    async def _edge_bytes(self, texto: str, voz: str, velocidade: str, tom_voz: str) -> bytes:
+    async def _edge_bytes(self, texto: str, perfil: tuple[str, str, str] | None = None) -> bytes:
+        """MP3 do edge-tts. ``perfil``: (voz, velocidade, tom); sem ele, a voz da Sexta-Feira."""
         import edge_tts
 
+        voz, velocidade, tom_voz = perfil or self._perfil(None)
         comunicacao = edge_tts.Communicate(texto, voz, rate=velocidade, pitch=tom_voz,
                                            connect_timeout=4, receive_timeout=15)
         dados = bytearray()
@@ -196,7 +198,7 @@ class Fala:
         resultado = None
         if self.app.cfg.voz_motor != "windows" and time.time() >= self._edge_pausado_ate:
             try:
-                resultado = decodificar(self._executar(self._edge_bytes(texto, *perfil)))
+                resultado = decodificar(self._executar(self._edge_bytes(texto, perfil)))
                 self._edge_falhas = 0
             except Exception as erro:  # noqa: BLE001
                 self._edge_falhas += 1
@@ -216,7 +218,7 @@ class Fala:
                 self._cache.popitem(last=False)
         return resultado
 
-    def _sintetizar_windows(self, texto: str, idioma: str) -> tuple[np.ndarray, int]:
+    def _sintetizar_windows(self, texto: str, idioma: str = "pt") -> tuple[np.ndarray, int]:
         import pyttsx3
 
         if self._pyttsx3 is None:

@@ -7,7 +7,8 @@ Modo tradutor: "modo tradutor para inglês", "traduz para espanhol o que eu fala
 ouvir sem a palavra de ativação e cada fala é transcrita com detecção de idioma: o que for dito em
 português sai falado no outro idioma, com uma voz nativa; o que for dito no outro idioma sai em
 português, com a voz dela. O holograma "traducao" mostra a conversa. Para sair: "Sexta-Feira, para de
-traduzir", "sair do tradutor" ou Esc no HUD.
+traduzir", "sair do tradutor" ou Esc no HUD. Quem a chama no meio da fala dela (ou aperta o botão de
+falar) fala com ela, não com o tradutor: o pedido vai para o cérebro, como fora do modo tradutor.
 
 Também traduz a tela ("traduz a tela") e o texto copiado ("traduz o que eu copiei para inglês", que já
 deixa a tradução na área de transferência).
@@ -113,15 +114,19 @@ _TRADUZ_TELA = re.compile(_TRADUZ + r"(?:(?:(?:a|o|essa|esse|esta|este|minha) )?
                           r"o que (?:esta|ta|tem|aparece) (?:escrito )?na (?:minha )?tela)(?: " + _PARA_IDIOMA + ")?$")
 _TRADUZ_COPIADO = re.compile(_TRADUZ + r"(?:o que (?:eu )?copiei|o texto (?:que (?:eu )?copiei|copiado)|"
                              r"isso que (?:eu )?copiei|a area de transferencia)(?: " + _PARA_IDIOMA + ")?$")
-_MARCAS_TELA = re.compile(r"^\s*(ORIGINAL|TRADU[CÇ][AÃ]O)\s*:\s*", re.I | re.M)
+# modelos de visão às vezes põem as marcas em negrito ("**ORIGINAL:**") ou como título ("## TRADUÇÃO")
+_MARCAS_TELA = re.compile(r"^[\s#*_]*(ORIGINAL|TRADU[CÇ][AÃ]O)[*_\s]*:[*_]*[ \t]*", re.I | re.M)
+_NOME = re.compile(r"\bsexta[\s-]*feira\b[\s,!.?:;-]*", re.I)
+_CODIGO = re.compile(r"^([a-z]{2})(?:[-_][a-z]{2,4})?$")
 
 
 def idioma_por_nome(nome: str) -> Idioma | None:
-    """ "inglês", "o inglês" ou "en" -> o idioma; ``None`` se não for um que eu traduza."""
-    palavras = normalizar(nome).split()
-    if not palavras:
-        return None
-    return _POR_NOME.get(palavras[-1]) or IDIOMAS.get(palavras[-1])
+    """ "inglês", "o inglês americano", "português do Brasil", "en" ou "en-US" -> o idioma; ``None`` se não for
+    um que eu traduza."""
+    nome = nome.strip().lower()
+    achado = next((_POR_NOME[p] for p in normalizar(nome).split() if p in _POR_NOME), None)
+    codigo = _CODIGO.match(nome)
+    return achado or (IDIOMAS.get(codigo.group(1)) if codigo else None)
 
 
 def definir_personalidade(app, estilo: str) -> None:
@@ -131,6 +136,16 @@ def definir_personalidade(app, estilo: str) -> None:
 
 def _casar(padroes, t: str) -> re.Match | None:
     return next((m for p in padroes if (m := p.match(t))), None)
+
+
+def _depois_do_nome(texto: str, no_meio: bool) -> str | None:
+    """O pedido depois de "Sexta-Feira" no começo da fala, ou em qualquer ponto com ``no_meio`` (quando ela é
+    interrompida, a gravação começa com o fim da própria fala dela). ``None`` se o nome não aparece."""
+    pedido = remover_ativacao(texto)
+    if pedido != texto.strip():
+        return pedido
+    partes = _NOME.split(texto) if no_meio else []
+    return partes[-1].strip() if len(partes) > 1 else None
 
 
 def _limpar(traducao: str) -> str:
@@ -217,16 +232,17 @@ class Tradutor:
         self.app.hologramas.atualizar_tipo("traducao", dados)
         return {"ok": True, "resumo": "Modo tradutor desligado."}
 
-    def _ao_ouvir(self, audio: np.ndarray) -> None:
-        """Roda na thread de voz a cada fala gravada no modo tradutor."""
+    def _ao_ouvir(self, audio: np.ndarray, chamada: bool) -> None:
+        """Roda na thread de voz a cada fala gravada no modo tradutor. ``chamada``: o usuário a chamou no meio
+        da fala dela ou apertou o botão de falar, então a fala é um pedido para ela."""
         alvo = self._alvo
         if alvo is None:
             return
         texto, codigo = self.app.transcritor.transcrever_idioma(audio, candidatos=(PORTUGUES.codigo, alvo.codigo))
-        if not texto:
+        if not normalizar(texto):  # nada, ou só pontuação ("...")
             return
         self.app.barramento.publicar("transcricao", texto=texto)
-        if codigo == PORTUGUES.codigo and self._pedido_para_mim(texto):
+        if self._pedido_para_mim(texto, chamada):
             return
         origem, destino = (PORTUGUES, alvo) if codigo == PORTUGUES.codigo else (alvo, PORTUGUES)
         traducao = self._traduzir(SISTEMA_FALA.format(origem=origem.descricao, destino=destino.descricao), texto)
@@ -241,19 +257,25 @@ class Tradutor:
         self._mostrar_conversa()
         self.app.fala.falar(traducao, voz=destino.voz)
 
-    def _pedido_para_mim(self, texto: str) -> bool:
-        """No modo tradutor, só "para de traduzir" e "Sexta-Feira, ..." (parar ou trocar de idioma) não são traduzidos."""
-        pedido = remover_ativacao(texto)
-        chamou = pedido != texto.strip()
-        t = normalizar(pedido)
+    def _pedido_para_mim(self, texto: str, chamada: bool) -> bool:
+        """Trata o que não é para traduzir: "para de traduzir", "Sexta-Feira, ..." (parar ou trocar de idioma)
+        e, quando ela foi chamada, qualquer outro pedido. Vale para qualquer idioma detectado: os comandos são em
+        português e o Whisper às vezes erra a língua de frases curtas."""
+        pedido = _depois_do_nome(texto, no_meio=chamada)
+        chamou = chamada or pedido is not None
+        t = normalizar(texto if pedido is None else pedido)
         if _PARAR_TRADUTOR.match(t) or (chamou and _PARAR_CURTO.match(t)):
             self.app.fala.falar(self.desligar()["resumo"])
             return True
         m = _casar(_PEDIDOS_TRADUTOR, t) if chamou else None
         idioma = idioma_por_nome(m.group("idioma") or "") if m else None
-        if idioma is None:
+        if idioma is not None:
+            self.app.fala.falar(self.ligar(idioma)["resumo"])
+            return True
+        if not chamada:  # "Sexta-feira de manhã" pode ser só parte da conversa: segue para a tradução
             return False
-        self.app.fala.falar(self.ligar(idioma)["resumo"])
+        if t and self.app.garantir_identidade("voz"):
+            self.app.agente.processar(texto if pedido is None else pedido, canal="voz")
         return True
 
     def _dados_conversa(self) -> dict:
@@ -355,7 +377,7 @@ def _passo_tradutor(app, valor, ctx, variaveis) -> None:
 
 
 ACOES_PROTOCOLO = {
-    "personalidade": {"rotulo": "Personalidade", "entrada": "opcoes", "opcoes": list(personalidade.PERSONALIDADES),
+    "personalidade": {"rotulo": "Personalidade", "entrada": "opcoes", "opcoes": list(personalidade.NOMES.values()),
                       "executar": _passo_personalidade},
     "tradutor": {"rotulo": "Modo tradutor", "entrada": "opcoes", "dica": "inglês ou desligar",
                  "opcoes": [i.nome for i in IDIOMAS.values() if i is not PORTUGUES] + ["desligar"],
@@ -395,11 +417,11 @@ def registrar(app, registro) -> None:
                            "copiado, o idioma de destino (sem ele, português)."),
     )
     def ferramenta_traducao(ctx, acao: str, idioma: str | None = None):
+        if acao == "parar":
+            return tradutor.desligar()
         escolhido = idioma_por_nome(idioma) if idioma else None
         if idioma and escolhido is None:
             return {"ok": False, "resumo": f"Ainda não traduzo {idioma}. Conheço: {_LISTA_IDIOMAS}."}
-        if acao == "parar":
-            return tradutor.desligar()
         if acao == "tela":
             return tradutor.traduzir_tela(escolhido)
         if acao == "copiado":

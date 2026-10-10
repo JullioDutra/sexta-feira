@@ -17,15 +17,13 @@ class FalaFalsa:
 
     def __init__(self) -> None:
         self.falas: list[str] = []
-        self.vozes: list[str | None] = []  # voz pedida para cada fala (None = a da Sexta-Feira)
         self.sons = 0
         self._lock = threading.Lock()
 
-    def falar(self, texto: str, voz: str | None = None) -> None:
+    def falar(self, texto: str) -> None:
         if texto and texto.strip():
             with self._lock:
                 self.falas.append(texto.strip())
-                self.vozes.append(voz)
 
     def falar_e_esperar(self, texto: str, timeout: float = 0) -> None:
         self.falar(texto)

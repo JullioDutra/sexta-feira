@@ -49,10 +49,12 @@ export function PararTradutorComEsc() {
 }
 
 function Cabecalho({ dados }: { dados: DadosTraducao }) {
+  // sem idioma pedido, o texto copiado vai para o português (ou para o inglês, se já estava em português)
   if (dados.modo !== "voz")
     return (
       <p className="numeral text-xs tracking-wide text-aco uppercase">
-        {ROTULO_MODO[dados.modo]} → {dados.idioma || "português"}
+        {ROTULO_MODO[dados.modo]}
+        {dados.idioma && ` → ${dados.idioma}`}
       </p>
     );
   return (

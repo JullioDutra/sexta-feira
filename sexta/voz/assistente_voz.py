@@ -1,7 +1,8 @@
 """Laço de voz: espera "Sexta-Feira", grava o comando, transcreve e manda para o cérebro.
 
 Na escuta contínua (modo tradutor) não espera o nome: cada fala gravada vai direto para
-quem pediu a escuta, sempre depois que a própria Sexta-Feira termina de falar.
+quem pediu a escuta, sempre depois que a própria Sexta-Feira termina de falar (e nunca com
+a voz dela no meio: se ela começar a falar durante a gravação, a gravação é descartada).
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ class AssistenteVoz:
         self._anel: deque[bytes] = deque(maxlen=int(PRE_ROLAGEM_S / DURACAO_BLOCO))
         self._ruido = 250.0
         self._ultimo_nivel = 0.0
-        self._escuta_continua: Callable[[np.ndarray], None] | None = None
+        self._escuta_continua: Callable[[np.ndarray, bool], None] | None = None
         self.mic_ok = False
 
     # ------------------------------------------------------------------
@@ -67,9 +68,10 @@ class AssistenteVoz:
         """Equivale a dizer "Sexta-Feira" (botão de falar no HUD)."""
         self._ptt.set()
 
-    def escutar_continuamente(self, ao_ouvir: Callable[[np.ndarray], None] | None) -> None:
-        """Liga a escuta sem a palavra de ativação: cada fala gravada (float32, 16 kHz) vai para ``ao_ouvir``,
-        que roda na thread de voz. ``None`` volta ao normal."""
+    def escutar_continuamente(self, ao_ouvir: Callable[[np.ndarray, bool], None] | None) -> None:
+        """Liga a escuta sem a palavra de ativação: cada fala gravada (float32, 16 kHz) vai para
+        ``ao_ouvir(audio, chamada)``, que roda na thread de voz. ``chamada`` é verdadeiro quando o usuário disse
+        "Sexta-Feira" enquanto ela falava ou apertou o botão de falar. ``None`` volta ao normal."""
         self._escuta_continua = ao_ouvir
 
     # ------------------------------------------------------------------
@@ -82,7 +84,6 @@ class AssistenteVoz:
                 continue
             ao_ouvir = self._escuta_continua
             if ao_ouvir is not None:
-                self._ptt.clear()
                 self._escutar_continuo(ao_ouvir)
                 continue
             bloco = self.mic.ler(0.3)
@@ -154,22 +155,24 @@ class AssistenteVoz:
             texto = self._ouvir([], espera=6.0, bip=False)
         return texto or None
 
-    def _escutar_continuo(self, ao_ouvir: Callable[[np.ndarray], None]) -> None:
+    def _escutar_continuo(self, ao_ouvir: Callable[[np.ndarray, bool], None]) -> None:
         """Uma volta da escuta contínua: espera ela terminar de falar, grava a próxima fala e a entrega."""
         app = self.app
         pre: list[bytes] = []
+        chamada = self._ptt.is_set()  # botão de falar no HUD: a próxima fala é um pedido para ela
+        self._ptt.clear()
         if app.fala.falando_ou_na_fila():
             if self._esperar_fala_ou_interrupcao():
-                pre = list(self._anel)  # disse "Sexta-Feira" no meio da fala dela: o pedido já começou
+                pre, chamada = list(self._anel), True  # disse "Sexta-Feira" no meio da fala dela: o pedido já começou
             else:
                 self._limpar_eco()
             self._anel.clear()
         app.estado.definir("ouvindo")
         try:
-            audio = self._gravar(pre, espera=ESPERA_CONTINUA_S)
+            audio = self._gravar(pre, espera=ESPERA_CONTINUA_S, desistir_se_ela_tocar=True)
             if audio is not None and self._escuta_continua is ao_ouvir:
                 app.estado.definir("pensando")
-                ao_ouvir(audio)
+                ao_ouvir(audio, chamada)
         except Exception:  # noqa: BLE001
             log.exception("Erro na escuta contínua")
             app.fala.tocar_som(SOM_ERRO)
@@ -234,7 +237,10 @@ class AssistenteVoz:
         texto = remover_ativacao(bruto)
         return texto or ""
 
-    def _gravar(self, pre_rolagem: list[bytes], espera: float, maximo: float = 15.0) -> np.ndarray | None:
+    def _gravar(self, pre_rolagem: list[bytes], espera: float, maximo: float = 15.0,
+                desistir_se_ela_tocar: bool = False) -> np.ndarray | None:
+        """Grava até o fim da fala; ``None`` se ninguém falou. ``desistir_se_ela_tocar``: devolve ``None`` se ela
+        começar a tocar algo durante a gravação (lembrete, resposta a um pedido feito pelo HUD), que seria eco."""
         blocos = list(pre_rolagem)
         limiar = max(self._ruido * 3.0, 350.0)
         inicio = time.monotonic()
@@ -243,7 +249,13 @@ class AssistenteVoz:
         falou = False
         silencio = 0.0
         fim = self.app.cfg.fim_de_fala_ms / 1000
+        tocava = desistir_se_ela_tocar and self.app.fala.falando()  # o fim de uma fala recém-interrompida não conta
         while self._rodando:
+            if desistir_se_ela_tocar:
+                tocando = self.app.fala.falando()
+                if tocando and not tocava:
+                    return None
+                tocava = tocando
             bloco = self.mic.ler(0.5)
             decorrido = time.monotonic() - inicio
             if bloco is None:
