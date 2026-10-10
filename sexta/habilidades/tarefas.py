@@ -44,7 +44,9 @@ def interpretar_prazo(texto: str | None, hoje: date | None = None) -> date | Non
         return hoje + timedelta(days=7 - hoje.weekday())  # a segunda da semana que vem
     if re.search(r"mes que vem|proximo mes", t):
         return (hoje.replace(day=1) + timedelta(days=32)).replace(day=1)
-    momento = interpretar_quando(t, datetime.combine(hoje, datetime.now().time()))
+    # fim do dia como referência: o prazo não depende da hora em que se fala
+    # ("até sexta" dito numa sexta = a próxima sexta; para hoje, diga "até hoje")
+    momento = interpretar_quando(t, datetime.combine(hoje, datetime.max.time().replace(microsecond=0)))
     return momento.date() if momento else None
 
 
