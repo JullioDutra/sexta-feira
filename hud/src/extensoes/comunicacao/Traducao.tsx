@@ -35,15 +35,18 @@ export function GlifoTraducao({ tamanho }: { tamanho: number }) {
   );
 }
 
-/** Em qualquer lugar do HUD do PC, Esc também encerra o modo tradutor (o Esc do núcleo só para a fala). */
+/** No HUD do PC, Esc também encerra o modo tradutor (o Esc do núcleo só para a fala). Com Ajustes ou outra janela
+ * aberta, o Esc só fecha a janela: quem fecha os Ajustes no meio de uma conversa não quer desligar o tradutor. */
 export function PararTradutorComEsc() {
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || (e.target as HTMLElement)?.closest?.("input, textarea, select")) return;
+      if (document.querySelector('[role="dialog"]')) return;
       pararTradutor();
     };
-    window.addEventListener("keydown", tecla);
-    return () => window.removeEventListener("keydown", tecla);
+    // na captura: roda antes do Esc que fecha a janela tirá-la da tela
+    window.addEventListener("keydown", tecla, true);
+    return () => window.removeEventListener("keydown", tecla, true);
   }, []);
   return null;
 }
