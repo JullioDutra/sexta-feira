@@ -654,6 +654,9 @@ class MemoriaDocumentos:
                 lido = extrair(Path(caminho))
             except ErroLeitura as e:
                 erro = str(e)
+            except OSError as e:  # aberto em outro programa: mtime zerado faz a próxima passada tentar de novo
+                log.info("Não consegui abrir %s: %s", caminho, e)
+                erro, mtime = "arquivo em uso ou sem permissão", 0.0
             except Exception as e:  # noqa: BLE001 - arquivo corrompido não para a leitura dos outros
                 log.info("Não consegui ler %s: %s", caminho, e)
                 erro = "não consegui ler o arquivo"

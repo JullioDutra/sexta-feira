@@ -219,6 +219,23 @@ def test_indexacao_incremental_e_remocao(app, contratos, memoria, monkeypatch):
     assert memoria.indexar() and memoria.estado()["documentos"] == 0
 
 
+def test_arquivo_em_uso_e_relido_na_proxima_passada(app, contratos, memoria, monkeypatch):
+    escrever(contratos / "aberto.txt", "Planilha de gastos do condomínio.")
+    original = mod.extrair
+
+    def em_uso(caminho):
+        if caminho.name == "aberto.txt":
+            raise PermissionError("em uso")
+        return original(caminho)
+
+    monkeypatch.setattr(mod, "extrair", em_uso)
+    assert memoria.indexar()
+    assert {e["arquivo"]: e["erro"] for e in memoria.estado()["erros"]} == {"aberto.txt": "arquivo em uso ou sem permissão"}
+    monkeypatch.setattr(mod, "extrair", original)
+    assert memoria.indexar() and memoria.estado()["total_erros"] == 0
+    assert memoria.buscar("gastos do condomínio")[0].arquivo == "aberto.txt"
+
+
 def test_pasta_indisponivel_mantem_o_indice(app, contratos, memoria):
     contratos.rename(contratos.with_name("Contratos (desconectado)"))  # ex.: disco externo desligado
     assert memoria.indexar()
