@@ -236,6 +236,16 @@ def test_arquivo_em_uso_e_relido_na_proxima_passada(app, contratos, memoria, mon
     assert memoria.buscar("gastos do condomínio")[0].arquivo == "aberto.txt"
 
 
+def test_arquivo_so_na_nuvem_nao_e_baixado(app, contratos, memoria, monkeypatch):
+    lidos = []
+    monkeypatch.setattr(mod, "extrair", lidos.append)
+    caminho = str(contratos / "nuvem.pdf")
+    memoria._indexar_arquivo(caminho, 123.0, 4096, 0x400000)  # FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+    assert lidos == []
+    erro = next(e["erro"] for e in memoria.estado()["erros"] if e["caminho"] == caminho)
+    assert "OneDrive" in erro
+
+
 def test_pasta_indisponivel_mantem_o_indice(app, contratos, memoria):
     contratos.rename(contratos.with_name("Contratos (desconectado)"))  # ex.: disco externo desligado
     assert memoria.indexar()

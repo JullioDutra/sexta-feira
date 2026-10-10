@@ -57,6 +57,8 @@ PASTAS_IGNORADAS = {"node_modules", "__pycache__", "venv", ".venv", "site-packag
 PASTAS_SISTEMA = {"windows", "program files", "program files (x86)", "programdata", "appdata", "$recycle.bin",
                   "system volume information", "recovery", "perflogs", "boot"}
 ATRIBUTO_OCULTO_OU_SISTEMA = 0x2 | 0x4  # FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM
+# OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS: arquivo "só online" do OneDrive (ler baixaria da nuvem)
+ATRIBUTO_SO_NA_NUVEM = 0x1000 | 0x40000 | 0x400000
 PASTAS_CONHECIDAS = {"documentos": "documentos", "meus documentos": "documentos", "documents": "documentos",
                      "downloads": "downloads", "area de trabalho": "area de trabalho", "desktop": "area de trabalho",
                      "imagens": "imagens", "fotos": "imagens", "musicas": "musicas", "videos": "videos"}
@@ -384,8 +386,8 @@ def _achar_configurada(pastas: list[str], texto: str) -> str | None:
     return next((p for p in pastas if normalizar(Path(p).name) == nome), None)
 
 
-def varrer(raizes: list[Path]) -> Iterator[tuple[str, float, int]]:
-    """(caminho, mtime, tamanho) dos documentos legíveis, pulando pastas ocultas, de sistema e de programas."""
+def varrer(raizes: list[Path]) -> Iterator[tuple[str, float, int, int]]:
+    """(caminho, mtime, tamanho, atributos do Windows) dos documentos, pulando pastas ocultas, de sistema e de programas."""
     total = 0
     for raiz in raizes:
         pilha = [raiz]
@@ -417,7 +419,7 @@ def varrer(raizes: list[Path]) -> Iterator[tuple[str, float, int]]:
                 if total > MAX_DOCUMENTOS:
                     log.warning("Memória dos documentos: limite de %d arquivos atingido", MAX_DOCUMENTOS)
                     return
-                yield entrada.path, info.st_mtime, info.st_size
+                yield entrada.path, info.st_mtime, info.st_size, getattr(info, "st_file_attributes", 0)
 
 
 # -- busca ----------------------------------------------------------------------------------------
@@ -625,12 +627,12 @@ class MemoriaDocumentos:
                 conhecidos = {p: (m, s) for p, m, s in db.execute("SELECT path, mtime, size FROM docs")}
             vistos: set[str] = set()
             lidos = 0
-            for caminho, mtime, tamanho in varrer(raizes):
+            for caminho, mtime, tamanho, atributos in varrer(raizes):
                 if self._parar.is_set():
                     return True  # passada incompleta: não apaga nada
                 vistos.add(caminho)
                 if conhecidos.get(caminho) != (mtime, tamanho):
-                    self._indexar_arquivo(caminho, mtime, tamanho)
+                    self._indexar_arquivo(caminho, mtime, tamanho, atributos)
                     lidos += 1
             indisponiveis = [Path(s["caminho"]) for s in situacao if s["erro"] and Path(s["caminho"]).is_absolute()]
             self._esquecer([p for p in set(conhecidos) - vistos
@@ -644,10 +646,12 @@ class MemoriaDocumentos:
             self._lendo = ""
             self._indexando.release()
 
-    def _indexar_arquivo(self, caminho: str, mtime: float, tamanho: int) -> None:
+    def _indexar_arquivo(self, caminho: str, mtime: float, tamanho: int, atributos: int = 0) -> None:
         self._lendo = Path(caminho).name
         lido, erro = Lido("", 0, []), ""
-        if tamanho > MAX_BYTES:
+        if atributos & ATRIBUTO_SO_NA_NUVEM:  # mtime zerado: confere de novo quando ficar disponível offline
+            erro, mtime = "só está na nuvem (OneDrive): marque “Manter sempre neste dispositivo”", 0.0
+        elif tamanho > MAX_BYTES:
             erro = f"maior que {MAX_BYTES // (1024 * 1024)} MB"
         else:
             try:
