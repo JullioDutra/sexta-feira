@@ -77,7 +77,7 @@ SISTEMA_TELA = ("Você é um tradutor. A imagem é a tela do computador do usuá
                 "(ignore menus, barras e botões do sistema) e traduza-o para o {destino}. Responda exatamente neste "
                 "formato, sem mais nada:\nORIGINAL:\n<texto transcrito>\nTRADUÇÃO:\n<texto traduzido>")
 DESTINO_AUTOMATICO = "português do Brasil (se o texto já estiver em português, traduza para o inglês)"
-ESPERA_PEDIDO_S = 20.0  # depois do "Pois não?", por quanto tempo a próxima fala ainda é um pedido para ela
+ESPERA_PEDIDO_S = 20.0  # depois do "Pois não?" ou de um "Confirma?", por quanto tempo a próxima fala é para ela
 
 # -- frases (texto normalizado: minúsculas, sem acentos nem pontuação) ------------------------------
 _ESTILOS = {"formal": "formal", "educada": "formal", "educado": "formal", "amigavel": "amigavel",
@@ -199,7 +199,7 @@ class Tradutor:
         self._ultimo_alvo = IDIOMAS["en"]
         self._linhas: deque[dict] = deque(maxlen=self.LINHAS_MAX)
         self._ids = itertools.count(1)
-        self._chamada_ate = 0.0  # ela respondeu "Pois não?": até lá, a próxima fala é um pedido para ela
+        self._chamada_ate = 0.0  # depois do "Pois não?" (ou de um "Confirma?"), a próxima fala é um pedido até lá
         self._holograma = self._dados_conversa()
 
     @property
@@ -306,6 +306,8 @@ class Tradutor:
             return False
         if app.garantir_identidade("voz"):
             app.agente.processar(texto if pedido is None else pedido, canal="voz")
+            if app.registro.pendente() is not None:  # ela perguntou "Confirma...?": o "sim" também é para ela
+                self._chamada_ate = time.monotonic() + ESPERA_PEDIDO_S
         return True
 
     def _dados_conversa(self) -> dict:

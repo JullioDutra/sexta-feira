@@ -454,6 +454,20 @@ def test_chamada_com_outro_pedido_vai_para_o_cerebro(app, conversa, pedidos_ao_c
     assert app.fala.falas[-1] == "Good morning, how are you?" and app.tradutor.alvo is not None
 
 
+def test_confirmacao_pedida_no_modo_tradutor_e_respondida_sem_o_nome(app, conversa, monkeypatch):
+    fechados = []
+    monkeypatch.setattr(app.apps, "fechar", lambda nome: (fechados.append(nome), (True, "ok"))[1])
+    agente = sem_ia(app)  # "fecha o discord" e o "sim" não passam pela IA
+    monkeypatch.setattr(agente, "completar", lambda sistema, texto, rapido=True: "Good morning, how are you?")
+    ligar(app)
+    conversa.ouvidos += [("Sexta-Feira, fecha o discord", "pt"), ("sim", "pt"), ("Bom dia, tudo bem?", "pt")]
+    app.voz._escuta_continua(SILENCIO, True)  # chamada no meio da fala dela
+    app.voz._escuta_continua(SILENCIO, False)
+    app.voz._escuta_continua(SILENCIO, False)
+    assert fechados == ["discord"]  # o "sim" confirmou, em vez de virar "yes"
+    assert conversa.modos == ["pedido", "pedido", "detectar"] and app.fala.falas[-1] == "Good morning, how are you?"
+
+
 def test_so_o_nome_sem_interromper_tambem_e_atendido(app, conversa, pedidos_ao_cerebro):
     ligar(app)
     conversa.ouvidos += [("Sexta-Feira?", "pt"), ("para", "pt")]
