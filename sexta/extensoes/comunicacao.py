@@ -21,6 +21,7 @@ import re
 import threading
 from collections import deque
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 
@@ -143,7 +144,7 @@ def _limpar(traducao: str) -> str:
 def _separar_tela(resposta: str) -> tuple[str, str]:
     """ "ORIGINAL: ... TRADUÇÃO: ..." -> (original, tradução). Sem as marcas, tudo é tradução."""
     partes = _MARCAS_TELA.split(resposta)
-    blocos = {normalizar(marca): texto.strip() for marca, texto in zip(partes[1::2], partes[2::2])}
+    blocos = {normalizar(marca): texto.strip() for marca, texto in zip(partes[1::2], partes[2::2], strict=True)}
     if not blocos.get("traducao"):
         return "", resposta.strip()
     return blocos.get("original", ""), blocos["traducao"]
@@ -406,7 +407,7 @@ def registrar(app, registro) -> None:
         return tradutor.ligar(escolhido)
 
 
-def atalho(t: str, ctx, rodar, original):
+def atalho(t: str, ctx, rodar, original: str | None) -> Callable[[], str] | None:
     if m := _MODO_PERSONALIDADE.match(t):
         if ctx.app.layouts.obter(t) is not None:  # um layout do usuário com esse nome tem a preferência
             return None
