@@ -448,7 +448,10 @@ def test_atalhos_de_pergunta(app, casa, memoria, monkeypatch, frase):
 @pytest.mark.parametrize("frase,args", [
     ("reindexa os meus documentos", {"acao": "indexar"}),
     ("atualiza a memória dos documentos", {"acao": "indexar"}),
-    ("usa a pasta Documentos barra Contratos como memória", {"acao": "adicionar_pasta", "pasta": "documentos barra contratos"}),
+    ("usa a pasta Documentos barra Contratos como memória", {"acao": "adicionar_pasta", "pasta": "Documentos barra Contratos"}),
+    (r"usa a pasta D:\Contratos\2024 como memória", {"acao": "adicionar_pasta", "pasta": r"D:\Contratos\2024"}),
+    (r"tira a pasta “C:\Users\Ana\Meus Contratos” da memória",
+     {"acao": "remover_pasta", "pasta": r"“C:\Users\Ana\Meus Contratos”"}),
     ("remove a pasta contratos da memória dos documentos", {"acao": "remover_pasta", "pasta": "contratos"}),
 ])
 def test_atalhos_de_pastas(app, casa, memoria, frase, args):

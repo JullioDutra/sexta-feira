@@ -114,6 +114,10 @@ _PASTA = r"(?:a |minha )?pasta (?:de |do |da |dos |das )?(.+?)"
 _USAR_PASTA = re.compile(r"^(?:usa|use|usar|coloca|coloque|poe|bota|adiciona|adicione|adicionar|inclui|inclua|incluir) "
                          rf"(?:tambem )?{_PASTA} (?:como|na|no|a|para a|pra) memoria(?: (?:dos|de) documentos)?$")
 _TIRAR_PASTA = re.compile(rf"^(?:tira|tire|tirar|remove|remova|remover) {_PASTA} da memoria(?: (?:dos|de) documentos)?$")
+# a mesma pasta no texto original: um caminho digitado ("D:\Contratos") perde as barras e as maiúsculas ao normalizar
+_PASTA_ESCRITA = r"\bpasta\s+(?:(?:de|do|da|dos|das)\s+)?(.+?)\s+"
+_USAR_ESCRITA = re.compile(_PASTA_ESCRITA + r"(?:como|na|no|[aà]|para\s+a|pra)\s+mem[oó]ria\b", re.IGNORECASE)
+_TIRAR_ESCRITA = re.compile(_PASTA_ESCRITA + r"da\s+mem[oó]ria\b", re.IGNORECASE)
 _MOSTRAR = re.compile(r"^(?:abre|abrir|mostra|mostrar|exibe) (?:a )?memoria (?:dos|de) documentos$")
 _RELER = re.compile(r"^(?:reindexa|reindexar|atualiza|atualizar|rele|reler) (?:a )?memoria (?:dos|de) documentos$|"
                     r"^(?:reindexa|reindexar|rele|reler) (?:os )?(?:meus )?documentos$")
@@ -321,7 +325,7 @@ def _descer(base: Path, partes: list[str]) -> Path:
 def resolver_pasta(texto: str) -> Path:
     """Caminho absoluto, pasta conhecida ("Documentos/Contratos") ou subpasta de Documentos, Área de Trabalho,
     Downloads ou da pasta do usuário ("Contratos")."""
-    bruto = (texto or "").strip().strip('"').strip()
+    bruto = (texto or "").strip().strip('"“”').strip()
     if not bruto:
         raise ErroDocumentos("Qual pasta?")
     caminho = Path(bruto).expanduser()
@@ -441,8 +445,10 @@ def varrer(raizes: list[Path]) -> Iterator[tuple[str, float, int, int]]:
 # -- busca ----------------------------------------------------------------------------------------
 
 def _radical(palavra: str) -> str:
-    """Tira terminações de plural/gênero para o prefixo casar as variações ("alugueis" e "aluguel" -> "alugue")."""
-    for fim, corte in (("oes", 3), ("aes", 3), ("ais", 2), ("eis", 2), ("ois", 2), ("ao", 2), ("l", 1), ("s", 1)):
+    """Tira terminações de plural/gênero para o prefixo casar as variações ("alugueis" e "aluguel" -> "alugue",
+    "fiadores" e "fiador" -> "fiador")."""
+    for fim, corte in (("oes", 3), ("aes", 3), ("ais", 2), ("eis", 2), ("ois", 2), ("res", 2), ("zes", 2), ("ses", 2),
+                       ("ao", 2), ("l", 1), ("s", 1)):
         if palavra.endswith(fim) and len(palavra) - corte >= 4:
             return palavra[:-corte]
     return palavra
@@ -467,6 +473,11 @@ def consulta_fts(termos: list[tuple[str, bool]]) -> str:
 
 def _palavras_do_nome(caminho: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", normalizar(Path(caminho).stem))
+
+
+def _no_nome(palavra: str, nome: list[str]) -> bool:
+    """A palavra dita aparece no nome do arquivo ("contrato" em "contratos_2024"); curtas só valem inteiras."""
+    return any(n == palavra or (len(palavra) >= 4 and n.startswith(palavra)) for n in nome)
 
 
 def _casa(termo: tuple[str, bool], palavras) -> bool:
@@ -500,14 +511,17 @@ def classificar(linhas: list[tuple], termos: list[tuple[str, bool]], limite: int
     return [t for t in ordenados if t.nota >= minimo][:limite]
 
 
+VERSAO_ESQUEMA = 1  # o índice é só uma cópia das pastas: um esquema diferente é apagado e refeito
+# AUTOINCREMENT: o id de um documento esquecido nunca volta, então um cartão antigo do HUD não abre outro arquivo
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS docs (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
     mtime REAL NOT NULL,
     size INTEGER NOT NULL,
     titulo TEXT NOT NULL DEFAULT '',
     paginas INTEGER NOT NULL DEFAULT 0,
+    total_trechos INTEGER NOT NULL DEFAULT 0,
     erro TEXT NOT NULL DEFAULT ''
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS trechos USING fts5(
@@ -562,6 +576,7 @@ class MemoriaDocumentos:
         self.ultima: dict | None = None  # última pergunta respondida (reabre no holograma)
         self._leitura = _Conexao(self._abrir)
         self._escrita = _Conexao(self._abrir)
+        self._abrindo = threading.Lock()  # num banco novo, ligar o WAL ao mesmo tempo nas duas falha ("locked")
         self._indexando = threading.Lock()
         self._acordar = threading.Event()
         self._parar = threading.Event()
@@ -575,12 +590,16 @@ class MemoriaDocumentos:
         return (self._escrita if escrita else self._leitura).usar()
 
     def _abrir(self) -> sqlite3.Connection:
+        with self._abrindo:
+            return self._conectar()
+
+    def _conectar(self) -> sqlite3.Connection:
         self.arquivo.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(str(self.arquivo), check_same_thread=False)
         try:
             db.execute("PRAGMA journal_mode = WAL")
             db.execute("PRAGMA synchronous = NORMAL")  # o índice é refeito sozinho se uma queda de energia o perder
-            db.executescript(ESQUEMA)
+            _preparar_esquema(db)
         except sqlite3.Error as erro:
             db.close()
             self.erro_banco = ("o SQLite deste Python não tem a busca de texto FTS5" if "fts5" in str(erro).lower()
@@ -667,6 +686,8 @@ class MemoriaDocumentos:
         try:
             inicio = time.monotonic()
             raizes, situacao = self.pastas_validas()
+            if not situacao and not self.arquivo.exists():
+                return True  # memória nunca usada: nem cria o banco
             with self._banco(escrita=True) as db:
                 conhecidos = {p: (m, s) for p, m, s in db.execute("SELECT path, mtime, size FROM docs")}
             vistos: set[str] = set()
@@ -675,7 +696,7 @@ class MemoriaDocumentos:
                 if self._parar.is_set():
                     return True  # passada incompleta: não apaga nada
                 vistos.add(caminho)
-                if conhecidos.get(caminho) != (mtime, tamanho):
+                if _mudou(conhecidos.get(caminho), mtime, tamanho, atributos):
                     self._indexar_arquivo(caminho, mtime, tamanho, atributos)
                     lidos += 1
             indisponiveis = [Path(s["caminho"]) for s in situacao if s["erro"] and Path(s["caminho"]).is_absolute()]
@@ -713,13 +734,14 @@ class MemoriaDocumentos:
         with self._banco(escrita=True) as db, db:
             linha = db.execute("SELECT id FROM docs WHERE path = ?", (caminho,)).fetchone()
             if linha is None:
-                doc = db.execute("INSERT INTO docs (path, mtime, size, titulo, paginas, erro) VALUES (?, ?, ?, ?, ?, ?)",
-                                 (caminho, mtime, tamanho, lido.titulo, lido.paginas, erro)).lastrowid
+                doc = db.execute("INSERT INTO docs (path, mtime, size, titulo, paginas, total_trechos, erro) "
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                 (caminho, mtime, tamanho, lido.titulo, lido.paginas, len(trechos), erro)).lastrowid
             else:
                 doc = linha[0]
                 _apagar_trechos(db, doc)
-                db.execute("UPDATE docs SET mtime = ?, size = ?, titulo = ?, paginas = ?, erro = ? WHERE id = ?",
-                           (mtime, tamanho, lido.titulo, lido.paginas, erro, doc))
+                db.execute("UPDATE docs SET mtime = ?, size = ?, titulo = ?, paginas = ?, total_trechos = ?, erro = ? "
+                           "WHERE id = ?", (mtime, tamanho, lido.titulo, lido.paginas, len(trechos), erro, doc))
             base = doc << BITS_TRECHO
             db.executemany("INSERT INTO trechos (rowid, texto, path, pagina) VALUES (?, ?, ?, ?)",
                            ((base + n, texto, caminho, pagina) for n, (pagina, texto) in enumerate(trechos)))
@@ -772,7 +794,7 @@ class MemoriaDocumentos:
                 nomes = self._nomes_dos_documentos(db)
         except ErroDocumentos:
             return False
-        return any(all(any(n.startswith(p) for n in nome) for p in palavras) for _, nome in nomes)
+        return any(all(_no_nome(p, nome) for p in palavras) for _, nome in nomes)
 
     def ultima_indexacao(self) -> float | None:
         with self._banco() as db:
@@ -785,14 +807,19 @@ class MemoriaDocumentos:
                   "indexando": self.indexando(), "lendo": self._lendo, "erro_banco": ""}
         try:
             with self._banco() as db:
-                estado["documentos"] = db.execute("SELECT count(*) FROM docs WHERE erro = ''").fetchone()[0]
-                estado["trechos"] = db.execute("SELECT count(*) FROM trechos").fetchone()[0]
+                # contar na tabela FTS5 leria o texto de todos os trechos
+                estado["documentos"], estado["trechos"] = db.execute(
+                    "SELECT count(*), coalesce(sum(total_trechos), 0) FROM docs WHERE erro = ''").fetchone()
                 estado["total_erros"] = db.execute("SELECT count(*) FROM docs WHERE erro != ''").fetchone()[0]
                 estado["erros"] = [{"arquivo": Path(p).name, "caminho": p, "erro": e} for p, e in
                                    db.execute("SELECT path, erro FROM docs WHERE erro != '' ORDER BY path LIMIT 50")]
             ultima = self.ultima_indexacao()
         except ErroDocumentos:
             estado["erro_banco"] = self.erro_banco
+            return estado
+        except sqlite3.DatabaseError as erro:
+            log.warning("Índice dos documentos com problema: %s", erro)
+            estado["erro_banco"] = f"o índice {self.arquivo.name} está danificado ({erro})"
             return estado
         if ultima is not None:
             estado["ultima"] = datetime.fromtimestamp(ultima).strftime("%d/%m/%Y %H:%M")
@@ -813,6 +840,27 @@ class MemoriaDocumentos:
         windows._exigir_windows()
         os.startfile(str(caminho))  # type: ignore[attr-defined]
         return caminho.name
+
+
+def _preparar_esquema(db: sqlite3.Connection) -> None:
+    """Cria as tabelas; um índice de outra versão do esquema é apagado (a próxima passada o refaz)."""
+    if db.execute("PRAGMA user_version").fetchone()[0] == VERSAO_ESQUEMA:
+        return
+    db.execute("BEGIN IMMEDIATE")
+    # a outra conexão (leitura/escrita) pode ter acabado de criar e começado a gravar: confere de novo com a trava
+    if db.execute("PRAGMA user_version").fetchone()[0] != VERSAO_ESQUEMA:
+        for comando in ("DROP TABLE IF EXISTS docs", "DROP TABLE IF EXISTS trechos", "DROP TABLE IF EXISTS meta",
+                        *filter(None, (c.strip() for c in ESQUEMA.split(";"))),
+                        f"PRAGMA user_version = {VERSAO_ESQUEMA}"):
+            db.execute(comando)
+    db.execute("COMMIT")
+
+
+def _mudou(salvo: tuple[float, int] | None, mtime: float, tamanho: int, atributos: int) -> bool:
+    """O arquivo precisa ser lido (de novo)? Um "só na nuvem" já registrado espera ficar disponível no PC."""
+    if atributos & ATRIBUTO_SO_NA_NUVEM:
+        return salvo != (0.0, tamanho)
+    return salvo != (mtime, tamanho)
 
 
 def _apagar_trechos(db: sqlite3.Connection, doc: int) -> None:
@@ -972,14 +1020,19 @@ def _pergunta_aos_documentos(t: str, app) -> bool:
     return app.documentos.tem_documento_chamado(doc)
 
 
+def _pasta_escrita(padrao: re.Pattern, original: str | None, normalizado: re.Match) -> str:
+    achado = padrao.search(original) if original else None
+    return achado.group(1) if achado else normalizado.group(1)
+
+
 def atalho(t: str, ctx, rodar, original: str | None):
     if _pergunta_aos_documentos(t, ctx.app):
         pergunta = remover_ativacao(original) if original else t
         return rodar("documentos", {"acao": "perguntar", "pergunta": pergunta or t})
     if m := _USAR_PASTA.match(t):
-        return rodar("documentos", {"acao": "adicionar_pasta", "pasta": m.group(1)})
+        return rodar("documentos", {"acao": "adicionar_pasta", "pasta": _pasta_escrita(_USAR_ESCRITA, original, m)})
     if m := _TIRAR_PASTA.match(t):
-        return rodar("documentos", {"acao": "remover_pasta", "pasta": m.group(1)})
+        return rodar("documentos", {"acao": "remover_pasta", "pasta": _pasta_escrita(_TIRAR_ESCRITA, original, m)})
     if _RELER.match(t):
         return rodar("documentos", {"acao": "indexar"})
     if _MOSTRAR.match(t):
