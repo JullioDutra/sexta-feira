@@ -302,7 +302,8 @@ def _descer(base: Path, partes: list[str]) -> Path:
 
 
 def resolver_pasta(texto: str) -> Path:
-    """Caminho absoluto, pasta conhecida ("Documentos/Contratos") ou subpasta de Documentos/Área de Trabalho/Downloads."""
+    """Caminho absoluto, pasta conhecida ("Documentos/Contratos") ou subpasta de Documentos, Área de Trabalho,
+    Downloads ou da pasta do usuário ("Contratos")."""
     bruto = (texto or "").strip().strip('"').strip()
     if not bruto:
         raise ErroDocumentos("Qual pasta?")
@@ -314,9 +315,10 @@ def resolver_pasta(texto: str) -> Path:
         raise ErroDocumentos("Qual pasta?")
     if partes[0] in PASTAS_CONHECIDAS:
         return _descer(windows.pasta_conhecida(PASTAS_CONHECIDAS[partes[0]]), partes[1:])
-    for raiz in ("documentos", "area de trabalho", "downloads"):
+    raizes = [windows.pasta_conhecida(nome) for nome in ("documentos", "area de trabalho", "downloads")]
+    for raiz in raizes + [Path.home()]:
         try:
-            return _descer(windows.pasta_conhecida(raiz), partes)
+            return _descer(raiz, partes)
         except ErroDocumentos:
             continue
     raise ErroDocumentos(f"Não encontrei a pasta {bruto}.")
@@ -440,19 +442,31 @@ def _palavras_do_nome(caminho: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", normalizar(Path(caminho).stem))
 
 
-def _termos_no_nome(termos: list[tuple[str, bool]], nome: list[str]) -> int:
-    return sum(any(p.startswith(r) if prefixo else p == r for p in nome) for r, prefixo in termos)
+def _casa(termo: tuple[str, bool], palavras) -> bool:
+    radical, prefixo = termo
+    return any(p.startswith(radical) for p in palavras) if prefixo else radical in palavras
 
 
 def classificar(linhas: list[tuple], termos: list[tuple[str, bool]], limite: int) -> list[Trecho]:
-    """Ordena pelo bm25 com bônus para arquivos cujo nome tem palavras da pergunta ("contrato")."""
-    trechos: dict[int, Trecho] = {}
-    for rowid, doc, caminho, pagina, texto, bm25, marcado in linhas:
-        if rowid in trechos:
-            continue
-        bonus = 1 + 0.5 * min(_termos_no_nome(termos, _palavras_do_nome(caminho)), 3)
-        trechos[rowid] = Trecho(doc, caminho, pagina, texto, marcado, -bm25 * bonus)  # bm25: quanto menor, melhor
-    ordenados = sorted(trechos.values(), key=lambda t: t.nota, reverse=True)
+    """Ordena por bônus do nome do arquivo x (2 x cobertura + bm25 relativo).
+
+    O bônus vale para arquivos cujo nome tem palavras da pergunta ("contrato"); nesses arquivos essas palavras só
+    escolhem o documento, e a cobertura (fração das outras palavras da pergunta presentes no trecho) decide: "o que
+    diz meu contrato sobre multa" traz a cláusula da multa, não a página que mais repete "contrato". A cobertura
+    pesa mais que o bm25 porque, com poucos documentos, o FTS5 zera o peso de palavras comuns a muitos trechos.
+    """
+    unicas = {linha[0]: linha for linha in linhas}.values()
+    maior = max((-linha[5] for linha in unicas), default=0.0) or 1.0  # bm25: quanto menor, melhor
+    trechos = []
+    for _rowid, doc, caminho, pagina, texto, bm25, marcado in unicas:
+        nome = _palavras_do_nome(caminho)
+        do_nome = [t for t in termos if _casa(t, nome)]
+        conteudo = [t for t in termos if t not in do_nome]
+        palavras = set(re.findall(r"[a-z0-9]+", normalizar(texto)))
+        cobertura = sum(_casa(t, palavras) for t in conteudo) / len(conteudo) if conteudo else 1.0
+        nota = (1 + 0.5 * min(len(do_nome), 3)) * (2 * cobertura - bm25 / maior)
+        trechos.append(Trecho(doc, caminho, pagina, texto, marcado, nota))
+    ordenados = sorted(trechos, key=lambda t: t.nota, reverse=True)
     if not ordenados:
         return []
     minimo = ordenados[0].nota * NOTA_MINIMA_RELATIVA
@@ -670,13 +684,18 @@ class MemoriaDocumentos:
         termos = termos_da_pergunta(pergunta)
         if not termos:
             return []
-        consulta = consulta_fts(termos)
         with self._banco() as db:
-            linhas = db.execute(SQL_BUSCA.format(filtro=""), (consulta, CANDIDATOS)).fetchall()
-            do_nome = [d for d, nome in self._nomes_dos_documentos(db) if _termos_no_nome(termos, nome)]
-            if do_nome:  # garante que o arquivo citado pelo nome concorra mesmo se outros dominarem o bm25
+            linhas = db.execute(SQL_BUSCA.format(filtro=""), (consulta_fts(termos), CANDIDATOS)).fetchall()
+            do_nome, termos_do_nome = [], set()
+            for doc, nome in self._nomes_dos_documentos(db):
+                casados = [t for t in termos if _casa(t, nome)]
+                if casados:
+                    do_nome.append(doc)
+                    termos_do_nome.update(casados)
+            if do_nome:  # os arquivos citados pelo nome concorrem mesmo se outros dominarem o bm25
+                conteudo = [t for t in termos if t not in termos_do_nome] or termos
                 linhas += db.execute(SQL_BUSCA.format(filtro="AND docs.id IN (SELECT value FROM json_each(?))"),
-                                     (consulta, json.dumps(do_nome), CANDIDATOS_DO_NOME)).fetchall()
+                                     (consulta_fts(conteudo), json.dumps(do_nome), CANDIDATOS_DO_NOME)).fetchall()
         return classificar(linhas, termos, limite)
 
     def tem_documento_chamado(self, texto: str) -> bool:
