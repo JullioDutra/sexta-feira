@@ -1,4 +1,8 @@
-"""Laço de voz: espera "Sexta-Feira", grava o comando, transcreve e manda para o cérebro."""
+"""Laço de voz: espera "Sexta-Feira", grava o comando, transcreve e manda para o cérebro.
+
+Na escuta contínua (modo tradutor) não espera o nome: cada fala gravada vai direto para
+quem pediu a escuta, sempre depois que a própria Sexta-Feira termina de falar.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +10,11 @@ import logging
 import threading
 import time
 from collections import deque
+from typing import Callable
 
 import numpy as np
 
+from ..cerebro import personalidade
 from ..util.texto import remover_ativacao, so_ativacao
 from .ativacao import criar_detector
 from .audio import AMOSTRAS_BLOCO, SOM_ATIVACAO, SOM_ERRO, TAXA_MIC, Microfone, rms
@@ -17,6 +23,7 @@ log = logging.getLogger(__name__)
 
 DURACAO_BLOCO = AMOSTRAS_BLOCO / TAXA_MIC
 PRE_ROLAGEM_S = 1.2
+ESPERA_CONTINUA_S = 3.0  # na escuta contínua, de quanto em quanto tempo o laço confere se ela ainda vale
 
 
 class AssistenteVoz:
@@ -29,6 +36,7 @@ class AssistenteVoz:
         self._anel: deque[bytes] = deque(maxlen=int(PRE_ROLAGEM_S / DURACAO_BLOCO))
         self._ruido = 250.0
         self._ultimo_nivel = 0.0
+        self._escuta_continua: Callable[[np.ndarray], None] | None = None
         self.mic_ok = False
 
     # ------------------------------------------------------------------
@@ -59,6 +67,11 @@ class AssistenteVoz:
         """Equivale a dizer "Sexta-Feira" (botão de falar no HUD)."""
         self._ptt.set()
 
+    def escutar_continuamente(self, ao_ouvir: Callable[[np.ndarray], None] | None) -> None:
+        """Liga a escuta sem a palavra de ativação: cada fala gravada (float32, 16 kHz) vai para ``ao_ouvir``,
+        que roda na thread de voz. ``None`` volta ao normal."""
+        self._escuta_continua = ao_ouvir
+
     # ------------------------------------------------------------------
     def _laco(self) -> None:
         while self._rodando:
@@ -66,6 +79,11 @@ class AssistenteVoz:
                 self.mic.esvaziar()
                 self._ptt.clear()
                 time.sleep(0.2)
+                continue
+            ao_ouvir = self._escuta_continua
+            if ao_ouvir is not None:
+                self._ptt.clear()
+                self._escutar_continuo(ao_ouvir)
                 continue
             bloco = self.mic.ler(0.3)
             disparou = self._ptt.is_set()
@@ -106,13 +124,15 @@ class AssistenteVoz:
 
         texto = self._ouvir_comando(pre_rolagem)
         for _ in range(8):  # comando + continuações e interrupções, sem precisar repetir o nome
-            if not texto:
+            if not texto or self._escuta_continua is not None:
                 app.estado.definir("inativa")
                 return
             if not app.garantir_identidade("voz"):
                 app.estado.definir("inativa")
                 return
             app.agente.processar(texto, canal="voz")
+            if self._escuta_continua is not None:
+                return  # o pedido ligou a escuta contínua (ex.: modo tradutor): o laço principal segue com ela
             if self._esperar_fala_ou_interrupcao():
                 # disse "Sexta-Feira" enquanto ela falava: ela para e escuta o novo pedido
                 pre = list(self._anel)
@@ -129,10 +149,32 @@ class AssistenteVoz:
         """Escuta o pedido depois do nome; se a pessoa só disse "Sexta-Feira", pergunta "Pois não?"."""
         texto = self._ouvir(pre_rolagem, espera=6.0, bip=True)
         if texto == "":
-            self.app.fala.falar_e_esperar("Pois não?", timeout=8)
+            self.app.fala.falar_e_esperar(personalidade.resposta(self.app.prefs, "chamada"), timeout=8)
             self._limpar_eco()
             texto = self._ouvir([], espera=6.0, bip=False)
         return texto or None
+
+    def _escutar_continuo(self, ao_ouvir: Callable[[np.ndarray], None]) -> None:
+        """Uma volta da escuta contínua: espera ela terminar de falar, grava a próxima fala e a entrega."""
+        app = self.app
+        pre: list[bytes] = []
+        if app.fala.falando_ou_na_fila():
+            if self._esperar_fala_ou_interrupcao():
+                pre = list(self._anel)  # disse "Sexta-Feira" no meio da fala dela: o pedido já começou
+            else:
+                self._limpar_eco()
+            self._anel.clear()
+        app.estado.definir("ouvindo")
+        try:
+            audio = self._gravar(pre, espera=ESPERA_CONTINUA_S)
+            if audio is not None and self._escuta_continua is ao_ouvir:
+                app.estado.definir("pensando")
+                ao_ouvir(audio)
+        except Exception:  # noqa: BLE001
+            log.exception("Erro na escuta contínua")
+            app.fala.tocar_som(SOM_ERRO)
+        if self._escuta_continua is None and not app.fala.falando_ou_na_fila():
+            app.estado.definir("inativa")
 
     def _limpar_eco(self) -> None:
         """Descarta o áudio captado enquanto ela mesma falava."""

@@ -15,6 +15,7 @@ from typing import Callable
 
 from ..util.tempo import data_extenso, formatar_hora
 from ..util.texto import normalizar
+from . import personalidade
 
 Plano = Callable[[], str]
 
@@ -150,7 +151,6 @@ def _sem_comando(original: str) -> str:
 def _casar(t: str, ctx, original: str | None = None) -> Plano | None:
     """Reconhece o comando e devolve uma função que o executa (sem executar nada ainda)."""
     app = ctx.app
-    tratamento = app.prefs.get("tratamento") or "chefe"
     reg = app.registro
 
     def rodar(nome: str, args: dict | None = None, padrao: str | None = None) -> Plano:
@@ -168,7 +168,7 @@ def _casar(t: str, ctx, original: str | None = None) -> Plano | None:
             return ""
         return parar
     if _OBRIGADO.match(t):
-        return falar(f"Às ordens, {tratamento}.")
+        return falar(personalidade.resposta(app.prefs, "obrigado"))
     if _HORAS.match(t):
         return lambda: f"São {formatar_hora(datetime.now())}."
     if _DATA.match(t):

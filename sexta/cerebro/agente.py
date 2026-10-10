@@ -27,7 +27,7 @@ from typing import Any
 
 from ..util.tempo import data_extenso, formatar_hora
 from ..util.texto import DivisorFrases, normalizar
-from . import atalhos
+from . import atalhos, personalidade
 from .ferramentas import Contexto
 from .ollama import ClienteOllama, ErroOllama
 
@@ -37,7 +37,7 @@ _IDS = itertools.count(1)
 
 PERSONA = """Você é a Sexta-Feira, a assistente pessoal de {nome}. Você roda localmente no computador dele (Windows 11) e controla o PC por meio de ferramentas.
 
-Personalidade: confiante, eficiente, leal e com um humor leve e seco, no estilo de uma IA de filme de super-herói. Trate o usuário por "{tratamento}". Fale sempre em português do Brasil.
+{personalidade} Trate o usuário por "{tratamento}". Fale sempre em português do Brasil.
 
 Como agir:
 - Use as ferramentas sempre que o pedido depender de dados reais ou exigir uma ação no computador. Nunca invente dados.
@@ -286,7 +286,7 @@ class Agente:
             registro.cancelar_pendente()  # "não", ou o usuário mudou de assunto
             if pendente.nome == "criar_protocolo":
                 self.app.hologramas.fechar(tipo="protocolo")
-            return "Tudo bem, cancelado." if resposta is False else None
+            return personalidade.resposta(self.app.prefs, "cancelado") if resposta is False else None
         resultado = registro.confirmar(ctx, self.app.verificar_para_acao)
         return resultado.get("resumo") or "Feito."
 
@@ -440,14 +440,18 @@ class Agente:
         self._salvar_historico()
 
     def _sistema(self, ctx: Contexto) -> str:
-        """Prompt de sistema estável (sem hora): permite o cache de prompt do Ollama."""
+        """Prompt de sistema estável (sem hora): permite o cache de prompt do Ollama.
+
+        A personalidade só muda o texto quando o usuário troca de personalidade.
+        """
         prefs = self.app.prefs
         nome = prefs.get("nome") or "seu usuário"
         rotinas = ", ".join(r.nome for r in self.app.rotinas.listar()) or "nenhuma"
         layouts = getattr(self.app, "layouts", None)
         return PERSONA.format(
             nome=nome,
-            tratamento=prefs.get("tratamento") or "chefe",
+            personalidade=personalidade.estilo(prefs),
+            tratamento=personalidade.tratamento(prefs),
             estilo=ESTILO_VOZ if ctx.canal == "voz" else ESTILO_TEXTO,
             cidade=prefs.get("cidade_rotulo") or prefs.get("cidade") or "não definida (pergunte se precisar)",
             rotinas=rotinas,
