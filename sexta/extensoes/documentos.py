@@ -235,7 +235,7 @@ def limpar_texto(texto: str) -> str:
 
 
 def fatiar(texto: str, tamanho: int = TAMANHO_TRECHO, sobreposicao: int = SOBREPOSICAO) -> list[str]:
-    """Trechos de até ``tamanho`` caracteres, cortados em fim de linha/frase/palavra, com ``sobreposicao`` entre eles."""
+    """Trechos de até ``tamanho`` caracteres cortados em fim de linha/frase/palavra, com ``sobreposicao`` entre eles."""
     texto = limpar_texto(texto)
     if len(texto) <= tamanho:
         return [texto] if texto else []
@@ -288,7 +288,8 @@ def _lista_de_textos(valor) -> list[str]:
 
 
 def _partes_da_pasta(texto: str) -> list[str]:
-    """ "Documentos/Contratos", "documentos barra contratos" ou "contratos dentro de documentos" -> ["documentos", "contratos"]."""
+    """ "Documentos/Contratos", "documentos barra contratos" ou "contratos dentro de documentos"
+    -> ["documentos", "contratos"]."""
     t = normalizar(texto.replace("\\", "/"))
     dentro = re.split(r" dentro (?:de|da|do|das|dos) ", t)
     if len(dentro) == 2:
@@ -387,7 +388,7 @@ def _achar_configurada(pastas: list[str], texto: str) -> str | None:
 
 
 def varrer(raizes: list[Path]) -> Iterator[tuple[str, float, int, int]]:
-    """(caminho, mtime, tamanho, atributos do Windows) dos documentos, pulando pastas ocultas, de sistema e de programas."""
+    """(caminho, mtime, tamanho, atributos do Windows) dos documentos; pula pastas ocultas, de sistema e de programas."""
     total = 0
     for raiz in raizes:
         pilha = [raiz]
@@ -638,7 +639,8 @@ class MemoriaDocumentos:
             self._esquecer([p for p in set(conhecidos) - vistos
                             if not any(Path(p).is_relative_to(r) for r in indisponiveis)])
             with self._banco() as db, db:
-                db.execute("INSERT OR REPLACE INTO meta (chave, valor) VALUES ('ultima_indexacao', ?)", (str(time.time()),))
+                db.execute("INSERT OR REPLACE INTO meta (chave, valor) VALUES ('ultima_indexacao', ?)",
+                           (str(time.time()),))
             log.info("Memória dos documentos: %d arquivos, %d lidos agora, em %.1fs",
                      len(vistos), lidos, time.monotonic() - inicio)
             return True
@@ -693,7 +695,8 @@ class MemoriaDocumentos:
 
     def _nomes_dos_documentos(self, db: sqlite3.Connection) -> list[tuple[int, list[str]]]:
         if self._nomes is None:
-            self._nomes = [(d, _palavras_do_nome(p)) for d, p in db.execute("SELECT id, path FROM docs WHERE erro = ''")]
+            documentos = db.execute("SELECT id, path FROM docs WHERE erro = ''")
+            self._nomes = [(d, _palavras_do_nome(p)) for d, p in documentos]
         return self._nomes
 
     # -- consulta ---------------------------------------------------------------------------
@@ -854,8 +857,10 @@ def adicionar_pasta(app, texto: str) -> str:
     raizes, _ = app.documentos.pastas_validas()
     dona = next((r for r in raizes if pasta.is_relative_to(r)), None)
     if dona is not None:
-        return f"A pasta {pasta.name} já está na memória dos documentos" + ("." if dona == pasta else f", dentro de {dona.name}.")
-    _publicar_pastas(app, [p for p in atuais if not Path(p).is_relative_to(pasta)] + [str(pasta)])  # a nova engloba as de dentro
+        onde = "." if dona == pasta else f", dentro de {dona.name}."
+        return f"A pasta {pasta.name} já está na memória dos documentos{onde}"
+    # a pasta nova engloba as que estavam dentro dela
+    _publicar_pastas(app, [p for p in atuais if not Path(p).is_relative_to(pasta)] + [str(pasta)])
     return f"Pronto: a pasta {pasta.name} entrou na memória dos documentos. Vou ler os arquivos em segundo plano."
 
 
