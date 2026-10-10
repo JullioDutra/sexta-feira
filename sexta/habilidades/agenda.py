@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 
 import httpx
 
+from ..cerebro import personalidade
 from ..util.tempo import formatar_hora
 
 log = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ class Agenda:
         for ev in proximos:
             self._avisados.add(ev["id"])
             faltam = max(1, round((ev["inicio"] - agora).total_seconds() / 60))
-            tratamento = self.app.prefs.get("tratamento") or "chefe"
+            tratamento = personalidade.tratamento(self.app.prefs)
             texto = f"{tratamento.capitalize()}, {ev['titulo']} começa em {faltam} minuto{'s' if faltam > 1 else ''}."
             self.app.fala.falar(texto)
             self.app.barramento.publicar("aviso", nivel="lembrete", texto=texto)

@@ -27,6 +27,7 @@ from urllib.parse import quote_plus
 import httpx
 import yaml
 
+from ..cerebro import personalidade
 from ..util.texto import normalizar
 from .noticias import BASE, PARAMS, TOPICOS, ha_quanto
 
@@ -463,7 +464,7 @@ class Jornal:
         por_tema: dict[str, list[dict]] = {}
         for tema, item in novidades:
             por_tema.setdefault(tema, []).append(item)
-        tratamento = self.app.prefs.get("tratamento") or "chefe"
+        tratamento = personalidade.tratamento(self.app.prefs)
         for tema, itens in por_tema.items():
             primeiro = itens[0]
             extra = f" e mais {len(itens) - 1}" if len(itens) > 1 else ""

@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from ..cerebro import personalidade
 from ..util.tempo import descrever_quando, formatar_hora
 from ..util.texto import normalizar
 from ..voz.audio import SOM_ALARME, SOM_LEMBRETE
@@ -160,7 +161,7 @@ class Lembretes:
         alarme = bool(linha["alarme"]) and not perdido
         log.info("Lembrete disparado: %s", texto)
         self.app.barramento.publicar("lembrete", id=linha["id"], texto=texto, alarme=alarme, perdido=perdido)
-        tratamento = self.app.prefs.get("tratamento") or "chefe"
+        tratamento = personalidade.tratamento(self.app.prefs)
         fala = self.app.fala
         if perdido:
             fala.falar(f"{tratamento}, enquanto eu estava desligada você tinha um lembrete: {texto}.")

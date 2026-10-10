@@ -166,6 +166,16 @@ def test_pois_nao_conforme_a_personalidade(app):
     assert personalidade.resposta(app.prefs, "chamada") == "Pois não, doutor?"
 
 
+def test_avisos_falados_usam_o_tratamento_da_personalidade(app):
+    from datetime import datetime, timedelta
+
+    app.prefs.atualizar({"personalidade": "formal"})
+    lembrete = app.lembretes.criar("tomar água", datetime.now() - timedelta(seconds=5))
+    linha = app.lembretes._db.execute("SELECT * FROM lembretes WHERE id = ?", (lembrete["id"],)).fetchone()
+    app.lembretes._disparar(linha, datetime.now(), perdido=False)
+    assert app.fala.falas[-1] == "Senhor, lembrete: tomar água."
+
+
 @pytest.mark.parametrize("frase,estilo", [
     ("modo formal", "formal"),
     ("Modo amigável", "amigavel"),
