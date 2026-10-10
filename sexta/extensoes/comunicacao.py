@@ -143,12 +143,14 @@ def _casar(padroes, t: str) -> re.Match | None:
 
 def _depois_do_nome(texto: str, no_meio: bool) -> str | None:
     """O pedido depois de "Sexta-Feira" no começo da fala, ou em qualquer ponto com ``no_meio`` (quando ela é
-    interrompida, a gravação começa com o fim da própria fala dela). ``None`` se o nome não aparece."""
+    interrompida, a gravação começa com o fim da própria fala dela). ``None`` se o nome não aparece.
+
+    Vale a primeira vez que o nome aparece: o próprio pedido pode citar o dia ("me lembra na sexta-feira...")."""
     pedido = remover_ativacao(texto)
     if pedido != texto.strip():
         return pedido
-    partes = _NOME.split(texto) if no_meio else []
-    return partes[-1].strip() if len(partes) > 1 else None
+    achado = _NOME.search(texto) if no_meio else None
+    return remover_ativacao(texto[achado.end():]) if achado else None
 
 
 def _tem_texto(texto: str) -> bool:

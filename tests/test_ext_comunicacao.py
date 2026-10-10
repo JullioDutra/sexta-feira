@@ -468,6 +468,15 @@ def test_confirmacao_pedida_no_modo_tradutor_e_respondida_sem_o_nome(app, conver
     assert conversa.modos == ["pedido", "pedido", "detectar"] and app.fala.falas[-1] == "Good morning, how are you?"
 
 
+def test_pedido_que_cita_a_sexta_feira_chega_inteiro(app, conversa, pedidos_ao_cerebro):
+    ligar(app)
+    conversa.ouvidos += [("morning. Sexta-feira, me lembra na sexta-feira de pagar a conta", "pt"),
+                         ("Até sexta-feira. Sexta-feira, para de traduzir.", "pt")]  # o eco dela também cita o dia
+    app.voz._escuta_continua(SILENCIO, True)
+    app.voz._escuta_continua(SILENCIO, True)
+    assert pedidos_ao_cerebro == ["me lembra na sexta-feira de pagar a conta"] and app.tradutor.alvo is None
+
+
 def test_so_o_nome_sem_interromper_tambem_e_atendido(app, conversa, pedidos_ao_cerebro):
     ligar(app)
     conversa.ouvidos += [("Sexta-Feira?", "pt"), ("para", "pt")]
