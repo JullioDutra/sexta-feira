@@ -21,7 +21,7 @@ import sqlite3
 import threading
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePath
@@ -87,18 +87,25 @@ TAMANHO_VOZ = "A resposta será falada em voz alta: no máximo 2 ou 3 frases cur
 TAMANHO_TEXTO = "Seja direto e completo, em até dois parágrafos curtos."
 
 # -- atalhos -------------------------------------------------------------------------------------
-_DOC = (r"(?:contratos?|documentos?|pdfs?|arquivos?|apolices?|boletos?|extratos?|notas? fisca(?:l|is)|holerites?|"
-        r"contracheques?|recibos?|laudos?|exames?|manua(?:l|is)|regulamentos?|regimentos?|estatutos?|escrituras?|"
-        r"certid(?:ao|oes)|declarac(?:ao|oes)|planilhas?|relatorios?|propostas?|orcamentos?|edita(?:l|is)|"
-        r"convenc(?:ao|oes)|faturas?|procurac(?:ao|oes)|curriculos?|apostilas?|garantias?)")
+# documentos que quase sempre são do próprio usuário ("o que diz o contrato sobre multa?")
+_DOC_PESSOAL = (r"contratos?|documentos?|pdfs?|arquivos?|apolices?|boletos?|extratos?|notas? fisca(?:l|is)|holerites?|"
+                r"contracheques?|recibos?|laudos?|exames?|escrituras?|certid(?:ao|oes)|planilhas?|faturas?|"
+                r"procurac(?:ao|oes)|curriculos?|apostilas?|garantias?")
+# também nomeiam documentos públicos ("o que diz o estatuto do idoso sobre..."): sem "meu/minha", só valem quando
+# o nome de um arquivo da memória confirma
+_DOC_GERAL = (r"manua(?:l|is)|regulamentos?|regimentos?|estatutos?|declarac(?:ao|oes)|relatorios?|propostas?|"
+              r"orcamentos?|edita(?:l|is)|convenc(?:ao|oes)")
+_DOC = rf"(?:{_DOC_PESSOAL}|{_DOC_GERAL})"
 _PALAVRA_DOC = re.compile(rf"\b{_DOC}\b")
+_PALAVRA_PESSOAL = re.compile(rf"\b(?:{_DOC_PESSOAL})\b")
 _POSSE = r"(?:meu|minha|meus|minhas)"
+_TEM_POSSE = re.compile(rf"\b{_POSSE}\b")
 _DIZ = r"(?:diz|dizem|fala|falam|consta|constam)"
-_DIZ_SOBRE = re.compile(rf"^o que {_DIZ} (?:o|a|os|as|no|na|nos|nas|{_POSSE}) (?:{_POSSE} )?(.+?) sobre .+$")
-_QUE_DIZ_SOBRE = re.compile(rf"^o que (?:o|a|os|as|{_POSSE}) (?:{_POSSE} )?(.+?) {_DIZ} sobre .+$")
-_NO_DOCUMENTO = re.compile(rf"^(?:no|na|nos|nas|segundo (?:o|a|os|as)|de acordo com (?:o|a|os|as)) (?:{_POSSE} )?{_DOC}"
-                           r"(?: [a-z0-9]+){0,6}? (?:qual|quais|quanto|quanta|quantos|quantas|o que|quando|como|onde|"
-                           r"existe|tem|ha|diz|fala|consta)\b.*$")
+_DIZ_SOBRE = re.compile(rf"^o que {_DIZ} (?:o|a|os|as|no|na|nos|nas|{_POSSE}) (?:{_POSSE} )?(?P<doc>.+?) sobre .+$")
+_QUE_DIZ_SOBRE = re.compile(rf"^o que (?:o|a|os|as|{_POSSE}) (?:{_POSSE} )?(?P<doc>.+?) {_DIZ} sobre .+$")
+_NO_DOCUMENTO = re.compile(rf"^(?:no|na|nos|nas|segundo (?:o|a|os|as)|de acordo com (?:o|a|os|as)) (?:{_POSSE} )?"
+                           rf"(?P<doc>{_DOC}" r"(?: [a-z0-9]+){0,6}?) (?:qual|quais|quanto|quanta|quantos|quantas|"
+                           r"o que|quando|como|onde|existe|tem|ha|diz|fala|consta)\b.*$")
 _NOS_DOCUMENTOS = re.compile(r"^(?:(?:procura|procure|procurar|busca|busque|buscar|pesquisa|pesquise|pesquisar|ve|veja|"
                              r"olha|olhe|consulta|consulte)(?: pra mim)? (?:nos|em) (?:meus )?|(?:nos|em) meus |"
                              r"(?:pergunta|pergunte|perguntar) (?:pros|para os|pra os|aos|a) (?:meus )?|"
@@ -230,7 +237,7 @@ def _extrair_texto(caminho: Path) -> Lido:
 def limpar_texto(texto: str) -> str:
     """Tira caracteres de controle e espaços repetidos, mas mantém as quebras de linha (linhas de tabela/CSV)."""
     texto = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", texto)
-    texto = re.sub(r"[ \t ]+", " ", texto)
+    texto = re.sub(r"[ \t\xa0]+", " ", texto)
     return re.sub(r"\s*\n\s*", "\n", texto).strip()
 
 
@@ -339,24 +346,30 @@ def motivo_recusa(caminho: PurePath, casa: PurePath, unidade_sistema: str) -> st
     if caminho == casa:
         return "Escolha uma pasta dentro da sua pasta de usuário, não ela inteira."
     if caminho.is_relative_to(casa):
-        if any(p.lower() == "appdata" for p in caminho.relative_to(casa).parts):
+        partes = caminho.relative_to(casa).parts
+        if any(p.lower() == "appdata" for p in partes):
             return "Por segurança, não leio a pasta AppData."
-        return None
-    if not caminho.drive or caminho.drive.lower() == unidade_sistema.lower():
+    elif not caminho.drive or caminho.drive.lower() == unidade_sistema.lower():
         return "Por segurança, só uso pastas dentro da sua pasta de usuário ou de outros discos."
-    if len(caminho.parts) == 1:
+    elif len(caminho.parts) == 1:
         return "Escolha uma pasta dentro do disco, não o disco inteiro."
-    if any(p.lower() in PASTAS_SISTEMA for p in caminho.parts):
-        return "Por segurança, não leio pastas do sistema."
+    else:
+        partes = caminho.parts[1:]
+        if any(p.lower() in PASTAS_SISTEMA for p in partes):
+            return "Por segurança, não leio pastas do sistema."
+    if any(p.startswith(".") for p in partes):  # .ssh, .aws, .config...: chaves e configurações de programas
+        return "Por segurança, não leio pastas ocultas."
     return None
 
 
 def validar_pasta(texto: str) -> Path:
     try:
         pasta = resolver_pasta(texto).resolve()
-    except OSError as erro:
-        raise ErroDocumentos(f"Não consegui abrir a pasta {texto}: {erro}") from erro
-    if not pasta.is_dir():
+        existe = pasta.is_dir()
+    except (OSError, ValueError, RuntimeError) as erro:  # sem permissão, nome inválido ou "~usuario" inexistente
+        log.debug("Pasta %r recusada: %s", texto, erro)
+        raise ErroDocumentos(f"Não consegui abrir a pasta {texto}.") from erro
+    if not existe:
         raise ErroDocumentos(f"Não encontrei a pasta {pasta}.")
     motivo = motivo_recusa(pasta, Path.home().resolve(), os.environ.get("SystemDrive", "C:"))
     if motivo:
@@ -374,9 +387,11 @@ def _sem_sobreposicao(pastas: list[Path]) -> list[Path]:
 
 def _achar_configurada(pastas: list[str], texto: str) -> str | None:
     """A pasta da lista que o usuário quis dizer: pelo caminho, ou só pelo nome ("tira a pasta contratos")."""
+    if texto in pastas:  # o HUD manda o caminho exatamente como está salvo
+        return texto
     try:
         alvo = resolver_pasta(texto).resolve()
-    except (ErroDocumentos, OSError):
+    except (ErroDocumentos, OSError, ValueError, RuntimeError):
         alvo = None
     if alvo is not None:
         for pasta in pastas:
@@ -508,35 +523,63 @@ WHERE trechos MATCH ? {{filtro}} ORDER BY nota LIMIT ?
 """
 
 
+class _Conexao:
+    """Conexão SQLite aberta na primeira vez que é usada e usada por uma thread de cada vez."""
+
+    def __init__(self, abrir) -> None:
+        self._abrir = abrir
+        self._db: sqlite3.Connection | None = None
+        self._lock = threading.Lock()
+
+    @contextmanager
+    def usar(self) -> Iterator[sqlite3.Connection]:
+        with self._lock:
+            if self._db is None:
+                self._db = self._abrir()
+            yield self._db
+
+    def aberta(self) -> bool:
+        return self._db is not None
+
+    def fechar(self) -> None:
+        with self._lock:
+            if self._db is not None:
+                self._db.close()
+                self._db = None
+
+
 class MemoriaDocumentos:
-    """Índice dos documentos: uma conexão SQLite protegida por lock, lida em segundo plano por uma thread."""
+    """Índice dos documentos, lido em segundo plano por uma thread.
+
+    Duas conexões SQLite em modo WAL: a de gravação é só da passada de indexação; a de leitura atende perguntas,
+    atalhos e o estado, que veem a última versão gravada sem esperar a gravação de um arquivo grande.
+    """
 
     def __init__(self, app, arquivo: Path) -> None:
         self.app = app
         self.arquivo = arquivo
         self.erro_banco = ""
         self.ultima: dict | None = None  # última pergunta respondida (reabre no holograma)
-        self._db: sqlite3.Connection | None = None
-        self._lock = threading.Lock()
+        self._leitura = _Conexao(self._abrir)
+        self._escrita = _Conexao(self._abrir)
         self._indexando = threading.Lock()
         self._acordar = threading.Event()
         self._parar = threading.Event()
         self._thread: threading.Thread | None = None
         self._lendo = ""
-        self._nomes: list[tuple[int, list[str]]] | None = None  # (id, palavras do nome) dos documentos legíveis
+        self._versao = 0  # sobe a cada gravação: invalida o cache dos nomes
+        self._nomes: tuple[int, list[tuple[int, list[str]]]] | None = None  # (versão, [(id, palavras do nome)])
 
     # -- banco ------------------------------------------------------------------------------
-    @contextmanager
-    def _banco(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            if self._db is None:
-                self._db = self._abrir()
-            yield self._db
+    def _banco(self, escrita: bool = False) -> AbstractContextManager[sqlite3.Connection]:
+        return (self._escrita if escrita else self._leitura).usar()
 
     def _abrir(self) -> sqlite3.Connection:
         self.arquivo.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(str(self.arquivo), check_same_thread=False)
         try:
+            db.execute("PRAGMA journal_mode = WAL")
+            db.execute("PRAGMA synchronous = NORMAL")  # o índice é refeito sozinho se uma queda de energia o perder
             db.executescript(ESQUEMA)
         except sqlite3.Error as erro:
             db.close()
@@ -583,17 +626,17 @@ class MemoriaDocumentos:
         self._acordar.set()
         if self._thread is not None:
             self._thread.join(timeout=3)
+        self._leitura.fechar()
         if self._indexando.acquire(timeout=3):  # não fecha o banco no meio de uma gravação
             try:
-                with self._lock:
-                    if self._db is not None:
-                        self._db.close()
-                        self._db = None
+                self._escrita.fechar()
             finally:
                 self._indexando.release()
 
     def pedir_indexacao(self) -> None:
         """Relê as pastas já, sem bloquear quem pediu."""
+        if self._parar.is_set():  # a Sexta-Feira está saindo: não reabre o banco
+            return
         if self._thread is not None and self._thread.is_alive():
             self._acordar.set()
         else:
@@ -624,7 +667,7 @@ class MemoriaDocumentos:
         try:
             inicio = time.monotonic()
             raizes, situacao = self.pastas_validas()
-            with self._banco() as db:
+            with self._banco(escrita=True) as db:
                 conhecidos = {p: (m, s) for p, m, s in db.execute("SELECT path, mtime, size FROM docs")}
             vistos: set[str] = set()
             lidos = 0
@@ -638,7 +681,7 @@ class MemoriaDocumentos:
             indisponiveis = [Path(s["caminho"]) for s in situacao if s["erro"] and Path(s["caminho"]).is_absolute()]
             self._esquecer([p for p in set(conhecidos) - vistos
                             if not any(Path(p).is_relative_to(r) for r in indisponiveis)])
-            with self._banco() as db, db:
+            with self._banco(escrita=True) as db, db:
                 db.execute("INSERT OR REPLACE INTO meta (chave, valor) VALUES ('ultima_indexacao', ?)",
                            (str(time.time()),))
             log.info("Memória dos documentos: %d arquivos, %d lidos agora, em %.1fs",
@@ -667,7 +710,7 @@ class MemoriaDocumentos:
                 log.info("Não consegui ler %s: %s", caminho, e)
                 erro = "não consegui ler o arquivo"
         trechos = fatiar_paginas(lido.textos)[: 1 << BITS_TRECHO]
-        with self._banco() as db, db:
+        with self._banco(escrita=True) as db, db:
             linha = db.execute("SELECT id FROM docs WHERE path = ?", (caminho,)).fetchone()
             if linha is None:
                 doc = db.execute("INSERT INTO docs (path, mtime, size, titulo, paginas, erro) VALUES (?, ?, ?, ?, ?, ?)",
@@ -680,24 +723,25 @@ class MemoriaDocumentos:
             base = doc << BITS_TRECHO
             db.executemany("INSERT INTO trechos (rowid, texto, path, pagina) VALUES (?, ?, ?, ?)",
                            ((base + n, texto, caminho, pagina) for n, (pagina, texto) in enumerate(trechos)))
-            self._nomes = None
+        self._versao += 1
 
     def _esquecer(self, caminhos: list[str]) -> None:
         if not caminhos:
             return
-        with self._banco() as db, db:
+        with self._banco(escrita=True) as db, db:
             for caminho in caminhos:
                 linha = db.execute("SELECT id FROM docs WHERE path = ?", (caminho,)).fetchone()
                 if linha:
                     _apagar_trechos(db, linha[0])
                     db.execute("DELETE FROM docs WHERE id = ?", (linha[0],))
-            self._nomes = None
+        self._versao += 1
 
     def _nomes_dos_documentos(self, db: sqlite3.Connection) -> list[tuple[int, list[str]]]:
-        if self._nomes is None:
+        versao = self._versao  # lida antes da consulta: uma gravação no meio invalida o que for guardado
+        if self._nomes is None or self._nomes[0] != versao:
             documentos = db.execute("SELECT id, path FROM docs WHERE erro = ''")
-            self._nomes = [(d, _palavras_do_nome(p)) for d, p in documentos]
-        return self._nomes
+            self._nomes = (versao, [(d, _palavras_do_nome(p)) for d, p in documentos])
+        return self._nomes[1]
 
     # -- consulta ---------------------------------------------------------------------------
     def buscar(self, pergunta: str, limite: int = TRECHOS_POR_RESPOSTA) -> list[Trecho]:
@@ -916,11 +960,16 @@ def registrar(app, registro) -> None:
 
 
 def _pergunta_aos_documentos(t: str, app) -> bool:
-    if _NOS_DOCUMENTOS.match(t) or _NO_DOCUMENTO.match(t):
+    if _NOS_DOCUMENTOS.match(t):
         return True
-    m = _DIZ_SOBRE.match(t) or _QUE_DIZ_SOBRE.match(t)
-    return m is not None and (_PALAVRA_DOC.search(m.group(1)) is not None
-                              or app.documentos.tem_documento_chamado(m.group(1)))
+    m = _NO_DOCUMENTO.match(t) or _DIZ_SOBRE.match(t) or _QUE_DIZ_SOBRE.match(t)
+    if m is None:
+        return False
+    doc = m.group("doc")
+    posse = _TEM_POSSE.search(t, 0, m.start("doc")) is not None
+    if _PALAVRA_PESSOAL.search(doc) or (posse and _PALAVRA_DOC.search(doc)):
+        return True
+    return app.documentos.tem_documento_chamado(doc)
 
 
 def atalho(t: str, ctx, rodar, original: str | None):
@@ -970,7 +1019,9 @@ def rotas(api, app, autenticado, so_pc) -> None:
         try:
             doc = int(corpo.get("id"))
         except (TypeError, ValueError):
-            raise HTTPException(400, "Documento inválido.") from None
+            doc = 0
+        if not 0 < doc < 1 << (63 - BITS_TRECHO):  # o id vira rowid dos trechos: maior que isso nem existe
+            raise HTTPException(400, "Documento inválido.")
         try:
             nome = await asyncio.to_thread(memoria.abrir, doc)
         except ErroDocumentos as erro:

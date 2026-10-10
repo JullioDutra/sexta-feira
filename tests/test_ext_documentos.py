@@ -270,7 +270,10 @@ def test_thread_de_fundo_indexa_e_encerra(app, casa, monkeypatch):
         assert app.documentos.estado()["documentos"] == 1
     finally:
         mod.encerrar(app)
-    assert not app.documentos._thread.is_alive() and app.documentos._db is None
+    memoria = app.documentos
+    assert not memoria._thread.is_alive() and not memoria._leitura.aberta() and not memoria._escrita.aberta()
+    memoria.pedir_indexacao()  # depois de encerrar, nada reabre o banco
+    assert not memoria._escrita.aberta()
 
 
 # ---------------------------------------------------------------- busca e respostas
