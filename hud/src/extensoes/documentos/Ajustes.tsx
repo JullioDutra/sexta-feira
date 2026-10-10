@@ -17,10 +17,10 @@ export default function AjustesDocumentos() {
   const [conferir, setConferir] = useState(0);
 
   const carregar = useCallback(
-    () =>
+    (avisarErro = true) =>
       api<EstadoMemoria>("/api/documentos/estado")
         .then(setEstado)
-        .catch((e) => avisar(e.message, "erro")),
+        .catch((e) => avisarErro && avisar(e.message, "erro")),
     [avisar],
   );
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function AjustesDocumentos() {
     if (!estado?.indexando && conferir === 0) return;
     const espera = window.setTimeout(() => {
       setConferir((n) => Math.max(0, n - 1));
-      carregar();
+      carregar(false); // conferência de fundo: sem aviso a cada falha
     }, VIGIAR_MS);
     return () => window.clearTimeout(espera);
   }, [estado, conferir, carregar]);
