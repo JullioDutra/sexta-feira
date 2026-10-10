@@ -854,8 +854,9 @@ def _indisponiveis(situacao: list[dict]) -> list[Path]:
     """Pastas da memória que sumiram (disco externo, rede): o índice delas fica guardado até voltarem.
 
     Uma pasta que existe mas foi recusada (pasta do sistema, oculta...) não conta: os documentos dela saem do índice."""
+    # os.path.exists nunca levanta erro (Path.exists do 3.12 levanta com um compartilhamento de rede fora do ar)
     return [Path(s["caminho"]) for s in situacao
-            if s["erro"] and Path(s["caminho"]).is_absolute() and not Path(s["caminho"]).exists()]
+            if s["erro"] and Path(s["caminho"]).is_absolute() and not os.path.exists(s["caminho"])]
 
 
 def _preparar_esquema(db: sqlite3.Connection) -> None:
