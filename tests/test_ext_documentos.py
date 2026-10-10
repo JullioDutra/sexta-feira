@@ -219,8 +219,9 @@ def test_indexacao_incremental_e_remocao(app, contratos, memoria, monkeypatch):
     assert [t.arquivo for t in memoria.buscar("garantia estendida")] == ["manual_geladeira.txt"]
     assert memoria.buscar("IPTU") == []
 
-    app.prefs.atualizar({"documentos_pastas": []})  # pasta tirada da memória: os documentos dela saem do índice
-    assert memoria.indexar() and memoria.estado()["documentos"] == 0
+    app.prefs.atualizar({"documentos_pastas": []})  # pasta tirada da memória: some das respostas na hora...
+    assert memoria.buscar("garantia estendida") == []
+    assert memoria.indexar() and memoria.estado()["documentos"] == 0  # ...e do índice na próxima passada
 
 
 def test_arquivo_em_uso_e_relido_na_proxima_passada(app, contratos, memoria, monkeypatch):
@@ -336,6 +337,13 @@ def test_pasta_indisponivel_mantem_o_indice(app, contratos, memoria):
     assert memoria.indexar()
     estado = memoria.estado()
     assert estado["documentos"] == 3 and estado["pastas"][0]["erro"]
+
+
+def test_pasta_recusada_sai_do_indice(app, contratos, memoria, monkeypatch):
+    monkeypatch.setattr(mod, "motivo_recusa", lambda *a: "Por segurança, não leio pastas do sistema.")
+    assert memoria.indexar()  # a pasta existe mas não vale mais: nada dela continua pesquisável
+    estado = memoria.estado()
+    assert estado["documentos"] == 0 and estado["pastas"][0]["erro"].startswith("Por segurança")
 
 
 def test_indexar_nao_roda_duas_vezes_ao_mesmo_tempo(memoria):

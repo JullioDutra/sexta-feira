@@ -621,6 +621,11 @@ class MemoriaDocumentos:
                     saida.append({"caminho": caminho, "origem": origem})
         return saida
 
+    def raizes_pesquisaveis(self) -> list[Path]:
+        """Pastas cujos documentos podem entrar numa resposta: as da memória e as que sumiram por enquanto."""
+        raizes, situacao = self.pastas_validas()
+        return raizes + _indisponiveis(situacao)
+
     def pastas_validas(self) -> tuple[list[Path], list[dict]]:
         validas, situacao = [], []
         for item in self.pastas_configuradas():
@@ -699,7 +704,7 @@ class MemoriaDocumentos:
                 if _mudou(conhecidos.get(caminho), mtime, tamanho, atributos):
                     self._indexar_arquivo(caminho, mtime, tamanho, atributos)
                     lidos += 1
-            indisponiveis = [Path(s["caminho"]) for s in situacao if s["erro"] and Path(s["caminho"]).is_absolute()]
+            indisponiveis = _indisponiveis(situacao)
             self._esquecer([p for p in set(conhecidos) - vistos
                             if not any(Path(p).is_relative_to(r) for r in indisponiveis)])
             with self._banco(escrita=True) as db, db:
@@ -770,6 +775,7 @@ class MemoriaDocumentos:
         termos = termos_da_pergunta(pergunta)
         if not termos:
             return []
+        raizes = self.raizes_pesquisaveis()
         with self._banco() as db:
             linhas = db.execute(SQL_BUSCA.format(filtro=""), (consulta_fts(termos), CANDIDATOS)).fetchall()
             do_nome, termos_do_nome = [], set()
@@ -782,6 +788,8 @@ class MemoriaDocumentos:
                 conteudo = [t for t in termos if t not in termos_do_nome] or termos
                 linhas += db.execute(SQL_BUSCA.format(filtro="AND docs.id IN (SELECT value FROM json_each(?))"),
                                      (consulta_fts(conteudo), json.dumps(do_nome), CANDIDATOS_DO_NOME)).fetchall()
+        # uma pasta tirada da memória sai das respostas na hora, antes de a passada apagar o índice dela
+        linhas = [linha for linha in linhas if any(Path(linha[2]).is_relative_to(r) for r in raizes)]
         return classificar(linhas, termos, limite)
 
     def tem_documento_chamado(self, texto: str) -> bool:
@@ -840,6 +848,14 @@ class MemoriaDocumentos:
         windows._exigir_windows()
         os.startfile(str(caminho))  # type: ignore[attr-defined]
         return caminho.name
+
+
+def _indisponiveis(situacao: list[dict]) -> list[Path]:
+    """Pastas da memória que sumiram (disco externo, rede): o índice delas fica guardado até voltarem.
+
+    Uma pasta que existe mas foi recusada (pasta do sistema, oculta...) não conta: os documentos dela saem do índice."""
+    return [Path(s["caminho"]) for s in situacao
+            if s["erro"] and Path(s["caminho"]).is_absolute() and not Path(s["caminho"]).exists()]
 
 
 def _preparar_esquema(db: sqlite3.Connection) -> None:
