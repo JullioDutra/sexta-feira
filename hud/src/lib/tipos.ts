@@ -20,7 +20,7 @@ export type TipoHolograma =
 
 export interface Holograma {
   id: string;
-  tipo: TipoHolograma;
+  tipo: TipoHolograma | (string & {}); // tipos extras vêm das extensões
   titulo: string;
   dados: any;
   criado: number;

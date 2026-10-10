@@ -57,4 +57,7 @@ def verificar_tudo(app) -> list[dict]:
     item("Teste de piscada", (cfg.modelos / MODELO_MARCOS).exists(), MODELO_MARCOS)
     item("Gestos com as mãos", (cfg.modelos / MODELO_MAOS).exists(), MODELO_MAOS)
     item("Câmera", app.camera.erro is None, app.camera.erro or "ok (liga quando precisa)")
+    from . import extensoes
+
+    itens.extend(extensoes.diagnostico(app))
     return itens

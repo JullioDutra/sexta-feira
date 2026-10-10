@@ -101,6 +101,12 @@ class Hologramas:
             return app.jornal.dados_holograma()
         if tipo == "tarefas":
             return app.tarefas.quadro()
+        if tipo not in ("relogio", "camera", "texto", "imagem"):
+            from .. import extensoes
+
+            extra = extensoes.dados_holograma(app, tipo)
+            if extra is not None:
+                return extra
         if tipo == "globo":
             prefs = app.prefs
             if prefs.get("cidade_lat") is not None:

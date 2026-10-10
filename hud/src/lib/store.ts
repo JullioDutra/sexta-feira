@@ -1,16 +1,5 @@
 import { create } from "zustand";
-import type {
-  Aviso,
-  Bloqueio,
-  EstadoAssistente,
-  Holograma,
-  InfoRosto,
-  Lembrete,
-  LinhaConversa,
-  Mao,
-  Preferencias,
-  Rotina,
-} from "./tipos";
+import type { Aviso, Bloqueio, EstadoAssistente, Holograma, InfoRosto, Lembrete, LinhaConversa, Mao, Preferencias, Rotina } from "./tipos";
 
 /** Valores que mudam muitas vezes por segundo: ficam fora do React (lidos em requestAnimationFrame). */
 export const tempoReal = {
@@ -121,8 +110,20 @@ export function descreverFerramenta(nome: string): string {
   return NOMES_FERRAMENTAS[nome] ?? nome;
 }
 
+const manipuladoresExtras: Record<string, ((evento: any) => void)[]> = {};
+
+/** Extensões (src/extensoes) recebem eventos do WebSocket por aqui. */
+export function aoEvento(tipo: string, funcao: (evento: any) => void): void {
+  (manipuladoresExtras[tipo] ??= []).push(funcao);
+}
+
 /** Aplica um evento vindo do WebSocket ao estado. */
 export function aplicarEvento(e: any): void {
+  try {
+    for (const funcao of manipuladoresExtras[e.tipo] ?? []) funcao(e);
+  } catch (erro) {
+    console.error("Erro numa extensão ao tratar", e.tipo, erro);
+  }
   const set = useHud.setState;
   const get = useHud.getState;
   switch (e.tipo) {

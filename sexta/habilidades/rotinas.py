@@ -45,6 +45,7 @@ ACOES_SEGURAS = ["falar", "abrir", "fechar", "tocar_youtube", "pesquisar", "volu
                  "layout", "minimizar_tudo", "plano_energia", "nao_perturbe", "modo_escuro", "organizar_downloads",
                  "brilho", "notificar", "mover_arquivo", "foco", "planejar_dia", "revisao_dia", "plano_semana"]
 ACOES = ACOES_SEGURAS + ["executar"]
+ACOES_EXTRAS: dict[str, Any] = {}  # acao -> funcao(app, valor, ctx, variaveis); preenchido pelas extensões
 GATILHOS = ["frase", "horario", "desbloquear", "app_aberto", "app_fechado", "bateria_baixa", "pendrive",
             "arquivo_novo", "wifi", "voltar_ao_pc"]
 CONDICOES = ["dias", "entre", "em_reuniao", "chovendo", "wifi"]
@@ -737,6 +738,8 @@ class Rotinas:
         elif acao in ("planejar_dia", "revisao_dia", "plano_semana"):
             falar(executar("planejar", {"acao": {"planejar_dia": "dia", "revisao_dia": "revisao_dia",
                                                  "plano_semana": "semana"}[acao]}, ctx)["resumo"])
+        elif acao in ACOES_EXTRAS:
+            ACOES_EXTRAS[acao](app, valor, ctx, variaveis or {})
         elif acao == "executar":
             subprocess.Popen(str(valor), shell=True)  # noqa: S602 - só vale em protocolos escritos à mão no YAML
         if acao in ("falar", "clima", "noticias", "lembretes", "briefing", "planejar_dia", "revisao_dia", "plano_semana"):

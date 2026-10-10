@@ -4,8 +4,9 @@ import { useHud } from "../lib/store";
 import type { Preferencias } from "../lib/tipos";
 import { Icone } from "../holograms/Glifos";
 import { CadastroRosto, ParearCelular } from "./Telas";
+import { AJUSTES_EXTRA } from "../extensoes";
 
-function Chave({ ligado, aoMudar, rotulo, descricao }: { ligado: boolean; aoMudar: (v: boolean) => void; rotulo: string; descricao?: string }) {
+export function Chave({ ligado, aoMudar, rotulo, descricao }: { ligado: boolean; aoMudar: (v: boolean) => void; rotulo: string; descricao?: string }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2">
       <span>
@@ -26,7 +27,7 @@ function Chave({ ligado, aoMudar, rotulo, descricao }: { ligado: boolean; aoMuda
   );
 }
 
-function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+export function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <section className="py-5 border-t border-aco/20 first:border-t-0">
       <h3 className="numeral text-2xl font-[300] text-[var(--luz)] mb-2">{titulo}</h3>
@@ -70,10 +71,15 @@ export default function Ajustes({ aoFechar }: { aoFechar: () => void }) {
   const [pinAtual, setPinAtual] = useState("");
   const [pinNovo, setPinNovo] = useState("");
 
-  const carregarDispositivos = () => api<Dispositivo[]>("/api/dispositivos").then(setDispositivos).catch(() => {});
+  const carregarDispositivos = () =>
+    api<Dispositivo[]>("/api/dispositivos")
+      .then(setDispositivos)
+      .catch(() => {});
   useEffect(() => {
     carregarDispositivos();
-    api<ItemDiagnostico[]>("/api/diagnostico").then(setDiagnostico).catch(() => {});
+    api<ItemDiagnostico[]>("/api/diagnostico")
+      .then(setDiagnostico)
+      .catch(() => {});
     const tecla = (e: KeyboardEvent) => e.key === "Escape" && !modal && aoFechar();
     window.addEventListener("keydown", tecla);
     return () => window.removeEventListener("keydown", tecla);
@@ -190,12 +196,24 @@ export default function Ajustes({ aoFechar }: { aoFechar: () => void }) {
             {temPin && (
               <label className="flex-1">
                 <span className="text-xs text-aco">PIN atual</span>
-                <input type="password" inputMode="numeric" value={pinAtual} onChange={(e) => setPinAtual(e.target.value)} className="block w-full bg-transparent border-b border-aco/50 py-1 text-gelo outline-none focus:border-[var(--luz)]" />
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  value={pinAtual}
+                  onChange={(e) => setPinAtual(e.target.value)}
+                  className="block w-full bg-transparent border-b border-aco/50 py-1 text-gelo outline-none focus:border-[var(--luz)]"
+                />
               </label>
             )}
             <label className="flex-1">
               <span className="text-xs text-aco">{temPin ? "Novo PIN (vazio remove)" : "PIN de 4 a 8 números"}</span>
-              <input type="password" inputMode="numeric" value={pinNovo} onChange={(e) => setPinNovo(e.target.value)} className="block w-full bg-transparent border-b border-aco/50 py-1 text-gelo outline-none focus:border-[var(--luz)]" />
+              <input
+                type="password"
+                inputMode="numeric"
+                value={pinNovo}
+                onChange={(e) => setPinNovo(e.target.value)}
+                className="block w-full bg-transparent border-b border-aco/50 py-1 text-gelo outline-none focus:border-[var(--luz)]"
+              />
             </label>
             <button type="submit" className="text-sm text-[var(--luz)] hover:text-gelo pb-1">
               {temPin ? "Trocar" : "Definir"}
@@ -241,6 +259,12 @@ export default function Ajustes({ aoFechar }: { aoFechar: () => void }) {
         <Secao titulo="Planejamento">
           <SecaoPlanejamento prefs={prefs} mudar={mudar} />
         </Secao>
+
+        {AJUSTES_EXTRA.map(({ titulo, componente: Componente }) => (
+          <Secao key={titulo} titulo={titulo}>
+            <Componente mudar={mudar} />
+          </Secao>
+        ))}
 
         <Secao titulo="Hologramas">
           <div className="flex gap-2 py-2">
@@ -298,7 +322,10 @@ export default function Ajustes({ aoFechar }: { aoFechar: () => void }) {
               {dispositivos.map((d) => (
                 <li key={d.id} className="flex items-center justify-between text-sm">
                   <span className="text-gelo">
-                    {d.nome} <span className="text-aco text-xs">visto {new Date(d.visto * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
+                    {d.nome}{" "}
+                    <span className="text-aco text-xs">
+                      visto {new Date(d.visto * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                    </span>
                   </span>
                   <button
                     type="button"
@@ -401,7 +428,10 @@ function SecaoPlanejamento({ prefs, mudar }: { prefs: Preferencias; mudar: (v: R
             almoco: almoco.trim(),
             foco_minutos: Number(focoMin) || 25,
             foco_pausa: Number(focoPausa) || 5,
-            foco_distracoes: distracoes.split(",").map((d) => d.trim()).filter(Boolean),
+            foco_distracoes: distracoes
+              .split(",")
+              .map((d) => d.trim())
+              .filter(Boolean),
             aviso_reuniao_min: Number(aviso) || 10,
           },
           "Planejamento salvo.",

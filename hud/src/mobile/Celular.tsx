@@ -6,6 +6,7 @@ import { useHud } from "../lib/store";
 import type { Holograma } from "../lib/tipos";
 import Clima from "../holograms/Clima";
 import { GlifoTipo, Icone } from "../holograms/Glifos";
+import { CELULAR_EXTRA, hologramaExtra } from "../extensoes";
 import { Atividades, Lembretes, Protocolo, Rotinas } from "../holograms/Listas";
 import Jornal from "../holograms/Jornal";
 import { Foco, Plano, Tarefas } from "../holograms/Planejamento";
@@ -209,14 +210,21 @@ function PainelMovel({ holo }: { holo: Holograma }) {
         return <p className="whitespace-pre-wrap text-gelo">{holo.dados?.texto}</p>;
       case "imagem":
         return <img src={comToken(holo.dados.url)} alt={holo.dados.legenda ?? "Imagem"} className="w-full" />;
-      default:
-        return <p className="text-sm text-aco">Este painel aparece no HUD do computador.</p>;
+      default: {
+        const extra = hologramaExtra(holo.tipo);
+        const Extra = extra?.celular ?? extra?.componente;
+        return Extra ? <Extra dados={holo.dados} /> : <p className="text-sm text-aco">Este painel aparece no HUD do computador.</p>;
+      }
     }
   })();
   return (
     <section className="holo-corpo px-4 py-3 overflow-hidden">
       <header className="flex items-center gap-2 mb-2">
-        <GlifoTipo tipo={holo.tipo} tamanho={16} className="text-[var(--luz)]" />
+        {hologramaExtra(holo.tipo)?.glifo ? (
+          <span className="text-[var(--luz)]">{hologramaExtra(holo.tipo)!.glifo!(16)}</span>
+        ) : (
+          <GlifoTipo tipo={holo.tipo} tamanho={16} className="text-[var(--luz)]" />
+        )}
         <h3 className="text-sm text-gelo/85 flex-1 truncate">{holo.titulo}</h3>
         <button
           type="button"
@@ -375,6 +383,10 @@ export default function Celular() {
         )}
         <div ref={fim} />
       </section>
+
+      {CELULAR_EXTRA.map((Extra, i) => (
+        <Extra key={i} />
+      ))}
 
       <div className="flex gap-2 overflow-x-auto px-5 pb-3 rolagem" aria-label="Atalhos">
         {acoes.map((a) => (

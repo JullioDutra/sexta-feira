@@ -6,6 +6,7 @@ import { tempoReal, useHud } from "../lib/store";
 import type { Holograma } from "../lib/tipos";
 import Clima from "../holograms/Clima";
 import { GlifoTipo, Icone } from "../holograms/Glifos";
+import { hologramaExtra } from "../extensoes";
 import Globo from "../holograms/Globo";
 import { Atividades, Camera, Imagem, Lembretes, Nota, Protocolo, Rotinas } from "../holograms/Listas";
 import Noticias from "../holograms/Noticias";
@@ -217,8 +218,10 @@ function Conteudo({ holo }: { holo: Holograma }) {
       return <Foco dados={holo.dados} />;
     case "imagem":
       return <Imagem dados={holo.dados} />;
-    default:
-      return <Nota dados={holo.dados} />;
+    default: {
+      const Extra = hologramaExtra(holo.tipo)?.componente;
+      return Extra ? <Extra dados={holo.dados} /> : <Nota dados={holo.dados} />;
+    }
   }
 }
 
@@ -316,7 +319,11 @@ function HologramaVivo({ holo, saindo, gerente }: { holo: Holograma; saindo: boo
               className="flex items-center gap-2.5 px-4 pt-3 pb-2 select-none cursor-grab active:cursor-grabbing"
               onDoubleClick={() => gerente.alternarFoco(holo.id)}
             >
-              <GlifoTipo tipo={holo.tipo} tamanho={17} className="text-[var(--luz)] shrink-0" />
+              {hologramaExtra(holo.tipo)?.glifo ? (
+                <span className="text-[var(--luz)] shrink-0">{hologramaExtra(holo.tipo)!.glifo!(17)}</span>
+              ) : (
+                <GlifoTipo tipo={holo.tipo} tamanho={17} className="text-[var(--luz)] shrink-0" />
+              )}
               <h2 className="text-[13px] font-medium text-gelo/85 truncate max-w-[300px]">{holo.titulo}</h2>
               <button
                 type="button"
@@ -327,12 +334,7 @@ function HologramaVivo({ holo, saindo, gerente }: { holo: Holograma; saindo: boo
               >
                 <Icone.Foco tamanho={15} />
               </button>
-              <button
-                type="button"
-                aria-label={`Fechar ${holo.titulo}`}
-                className="p-1 text-aco hover:text-coral"
-                onClick={() => gerente.aoFechar(holo.id)}
-              >
+              <button type="button" aria-label={`Fechar ${holo.titulo}`} className="p-1 text-aco hover:text-coral" onClick={() => gerente.aoFechar(holo.id)}>
                 <Icone.Fechar tamanho={16} />
               </button>
             </header>
@@ -455,14 +457,7 @@ function useMaos(gerente: GerentePalco, tela: React.RefObject<HTMLCanvasElement 
       if (opacidade > 0.02) desenhar(ctx, leituras, estados, opacidade, agora);
     };
 
-    const processarMao = (
-      m: LeituraMao,
-      e: EstadoMao,
-      todas: LeituraMao[],
-      estadosMaos: Map<string, EstadoMao>,
-      agora: number,
-      destacados: Set<string>,
-    ) => {
+    const processarMao = (m: LeituraMao, e: EstadoMao, todas: LeituraMao[], estadosMaos: Map<string, EstadoMao>, agora: number, destacados: Set<string>) => {
       const pincava = e.inicioPinca > 0;
       if (m.pinca && !pincava) {
         e.inicioPinca = agora;

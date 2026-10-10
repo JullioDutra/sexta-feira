@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, 
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import extensoes
 from .certificado import garantir_certificado
 from .seguranca import Cliente, ErroAcesso
 from .util.rede import ips_locais, nome_do_computador
@@ -613,6 +614,8 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
                     app.agente.cancelar()
                 elif tipo == "ping":
                     await websocket.send_json({"tipo": "pong", "t": mensagem.get("t")})
+                else:
+                    await extensoes.mensagem_ws(app, cliente, registrado, mensagem, websocket)
         except (WebSocketDisconnect, RuntimeError):
             pass
         except Exception:  # noqa: BLE001
@@ -622,6 +625,9 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             envio.cancel()
             if registrado.quer_maos and not app.barramento.alguem_quer_maos():
                 app.maos.desligar()
+
+    # -------------------------------------------------------------- extensões (Fases 5 e 6)
+    extensoes.rotas(api, app, autenticado, so_pc)
 
     # -------------------------------------------------------------- HUD (arquivos estáticos)
     dist: Path = app.cfg.hud_dist

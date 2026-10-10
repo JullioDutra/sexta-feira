@@ -11,7 +11,7 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
-from . import __version__
+from . import __version__, extensoes
 from .atividades import Atividades
 from .cerebro.agente import Agente
 from .cerebro.ferramentas import Contexto, Registro
@@ -71,6 +71,7 @@ def briefing_simples(dados: dict) -> str:
 
 class SextaFeira:
     def __init__(self, cfg: Config, *, com_voz: bool = True) -> None:
+        extensoes.preparar()  # preferências, hologramas e ações das extensões (Fases 5 e 6)
         self.cfg = cfg
         self.com_voz = com_voz
         self.versao = __version__
@@ -104,10 +105,12 @@ class SextaFeira:
         self.terminal = Terminal(cfg.pasta_config / "terminal.yaml")
         self.atividades = Atividades(self, cfg.dados / "atividades.jsonl")
         self.vigia = Vigia(self)
+        extensoes.instalar(self)
 
         self.registro = Registro()
         self.registro.ao_executar = self.atividades.anotar
         registrar_ferramentas(self, self.registro)
+        extensoes.registrar(self, self.registro)
         self.agente = Agente(self)
 
         self._rodando = False
@@ -287,6 +290,7 @@ class SextaFeira:
         self.vigia.iniciar()
         self.jornal.iniciar()
         self.agenda.iniciar()
+        extensoes.iniciar(self)
         threading.Thread(target=self._vigiar_windows, name="vigia-windows", daemon=True).start()
         threading.Thread(target=self.apps.menu_iniciar, daemon=True).start()
         if windows.WINDOWS:
@@ -375,6 +379,7 @@ class SextaFeira:
             return
         self._rodando = False
         log.info("Encerrando a Sexta-Feira")
+        extensoes.encerrar(self)
         for parar in (self.voz.parar, self.lembretes.parar, self.vigia.parar, self.rotinas.parar, self.jornal.parar, self.agenda.parar, lambda: self.foco.encerrar(silencioso=True), self.maos.desligar,
                       self.fala.encerrar):
             try:

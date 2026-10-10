@@ -3,6 +3,7 @@ import { conexao } from "../lib/socket";
 import { useHud } from "../lib/store";
 import Ajustes from "./Ajustes";
 import EditorProtocolos from "./EditorProtocolos";
+import { SOBREPOSICOES } from "../extensoes";
 import { Avisos, BarraComando, Cabecalho, Doca, Espelho, Legendas, Status } from "./Interface";
 import Nucleo from "./Nucleo";
 import Palco from "./Palco";
@@ -49,6 +50,9 @@ export default function Desktop() {
       <PrimeiraConfiguracao />
       {ajustes && <Ajustes aoFechar={() => setAjustes(false)} />}
       {editor !== null && <EditorProtocolos inicial={editor} aoFechar={() => abrirEditor(null)} />}
+      {SOBREPOSICOES.map((Sobreposicao, i) => (
+        <Sobreposicao key={i} />
+      ))}
       <Avisos />
     </main>
   );

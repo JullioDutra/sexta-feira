@@ -202,6 +202,12 @@ def _casar(t: str, ctx, original: str | None = None) -> Plano | None:
     if rotina is not None:
         return rodar("rotina", {"acao": "executar", "nome": rotina.nome})
 
+    from .. import extensoes  # comandos das extensões (Fases 5 e 6)
+
+    plano = extensoes.atalho(t, ctx, rodar, original)
+    if plano is not None:
+        return plano
+
     # -- hologramas e registro
     if m := _HOLOGRAMA.match(t):
         tipo = "atividades" if "atividades" in m.group(2) else m.group(2)
