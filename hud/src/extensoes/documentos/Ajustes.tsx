@@ -7,6 +7,8 @@ import { numero, type EstadoMemoria } from "./tipos";
 
 const VIGIAR_MS = 2000;
 
+const nomeDaPasta = (caminho: string) => caminho.split(/[\\/]/).filter(Boolean).pop() ?? caminho;
+
 export default function AjustesDocumentos() {
   const avisar = useHud((s) => s.acoes.avisar);
   const [estado, setEstado] = useState<EstadoMemoria | null>(null);
@@ -62,10 +64,9 @@ export default function AjustesDocumentos() {
         {estado?.pastas.length === 0 && <li className="text-sm text-aco">Nenhuma pasta escolhida.</li>}
         {estado?.pastas.map((p) => (
           <li key={p.caminho} className="flex items-start gap-2 py-1">
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] text-gelo" title={p.caminho}>
-                {p.caminho}
-              </span>
+            <span className="min-w-0 flex-1" title={p.caminho}>
+              <span className="block truncate text-[14px] text-gelo">{nomeDaPasta(p.caminho)}</span>
+              <span className="block truncate text-xs text-aco">{p.caminho}</span>
               {p.erro && <span className="block text-xs text-coral leading-snug">{p.erro}</span>}
             </span>
             {p.origem === "env" ? (
@@ -99,7 +100,7 @@ export default function AjustesDocumentos() {
             value={pasta}
             onChange={(e) => setPasta(e.target.value)}
             placeholder="C:\Users\voce\Documents\Contratos"
-            className="mt-0.5 block w-full bg-transparent border-b border-aco/50 py-1 text-gelo outline-none focus:border-[var(--luz)]"
+            className="mt-0.5 block w-full bg-transparent border-b border-aco/50 py-1 text-gelo outline-none placeholder:text-aco/60 focus:border-[var(--luz)]"
           />
         </label>
         <button type="submit" className="text-sm text-[var(--luz)] hover:text-gelo pb-1">

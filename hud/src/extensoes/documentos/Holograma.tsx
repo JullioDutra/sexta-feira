@@ -127,7 +127,7 @@ function Perguntar() {
         onChange={(e) => setPergunta(e.target.value)}
         placeholder="Pergunte aos seus documentos…"
         aria-label="Pergunta aos documentos"
-        className="flex-1 min-w-0 bg-transparent border-b border-aco/40 py-1 text-sm text-gelo outline-none focus:border-[var(--luz)]"
+        className="flex-1 min-w-0 bg-transparent border-b border-aco/40 py-1 text-sm text-gelo outline-none placeholder:text-aco/70 focus:border-[var(--luz)]"
       />
       <button type="submit" data-clicavel disabled={enviando} aria-label="Perguntar" className="p-1 text-[var(--luz)] hover:text-gelo disabled:opacity-40">
         <Icone.Enviar tamanho={18} />
