@@ -112,7 +112,9 @@ function Perguntar() {
     if (!texto || enviando) return;
     setEnviando(true);
     try {
-      await api("/api/documentos/perguntar", { method: "POST", json: { pergunta: texto } });
+      // a resposta chega pelo próprio holograma; o que não vira resposta (sem pastas, ainda lendo) vira aviso
+      const r = await api<{ texto: string; ok: boolean }>("/api/documentos/perguntar", { method: "POST", json: { pergunta: texto } });
+      if (!r.ok) avisar(r.texto, "info");
       setPergunta("");
     } catch (erro: any) {
       avisar(erro.message, "erro");
