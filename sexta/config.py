@@ -64,7 +64,15 @@ class Config:
     raiz: Path = RAIZ
     dados: Path = RAIZ / "dados"
 
-    # Cérebro (Ollama)
+    # Cérebro: "claude" (nuvem, mais rápido e inteligente), "ollama" (local) ou "auto"
+    # (Claude se houver ANTHROPIC_API_KEY, senão Ollama)
+    cerebro: str = "auto"
+    claude_modelo: str = "claude-opus-5-5"
+    claude_modelo_rapido: str = "claude-haiku-5-5"  # vazio = um cérebro só
+    claude_esforco_voz: str = "low"
+    claude_esforco_texto: str = "medium"
+
+    # Cérebro local (Ollama)
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_modelo: str = "qwen3.5:9b"
     ollama_modelo_rapido: str = ""   # opcional: modelo menor só para comandos curtos ("dois cérebros")
@@ -74,6 +82,13 @@ class Config:
     ollama_temperatura: float = 0.5
     ollama_manter_carregado: str = "4h"  # quanto tempo o modelo fica na memória sem uso (evita recarregar)
     ollama_max_tokens_voz: int = 400
+
+    # Notificações no celular (opcional, app ntfy)
+    ntfy_topico: str = ""
+    ntfy_servidor: str = "https://ntfy.sh"
+
+    # Agenda (Google/Outlook pelo endereço iCal secreto; só leitura)
+    agenda_ics: list[str] = field(default_factory=list)
 
     # Arquivos
     pastas_arquivos: list[str] = field(default_factory=list)  # pastas extras para a busca de arquivos
@@ -112,6 +127,17 @@ class Config:
 
     log_nivel: str = "INFO"
 
+    def usa_claude(self) -> bool:
+        if self.cerebro == "claude":
+            return True
+        if self.cerebro == "ollama":
+            return False
+        return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+
+    @property
+    def modelo_principal(self) -> str:
+        return self.claude_modelo if self.usa_claude() else self.ollama_modelo
+
     @property
     def modelos(self) -> Path:
         return self.dados / "modelos"
@@ -134,6 +160,11 @@ class Config:
         if load_dotenv and arquivo_env.exists():
             load_dotenv(arquivo_env, override=False, encoding="utf-8")
         cfg = cls(
+            cerebro=_env_str("CEREBRO", cls.cerebro).lower(),
+            claude_modelo=_env_str("CLAUDE_MODELO", cls.claude_modelo),
+            claude_modelo_rapido=os.environ.get("CLAUDE_MODELO_RAPIDO", cls.claude_modelo_rapido).strip(),
+            claude_esforco_voz=_env_str("CLAUDE_ESFORCO_VOZ", cls.claude_esforco_voz).lower(),
+            claude_esforco_texto=_env_str("CLAUDE_ESFORCO_TEXTO", cls.claude_esforco_texto).lower(),
             ollama_url=_env_str("OLLAMA_URL", cls.ollama_url).rstrip("/"),
             ollama_modelo=_env_str("OLLAMA_MODELO", cls.ollama_modelo),
             ollama_modelo_rapido=_env_str("OLLAMA_MODELO_RAPIDO"),
@@ -144,6 +175,9 @@ class Config:
             ollama_manter_carregado=_env_str("OLLAMA_MANTER_CARREGADO", cls.ollama_manter_carregado),
             ollama_max_tokens_voz=_env_int("OLLAMA_MAX_TOKENS_VOZ", cls.ollama_max_tokens_voz),
             pastas_arquivos=_env_lista("PASTAS_ARQUIVOS"),
+            agenda_ics=_env_lista("AGENDA_ICS"),
+            ntfy_topico=_env_str("NTFY_TOPICO"),
+            ntfy_servidor=_env_str("NTFY_SERVIDOR", cls.ntfy_servidor),
             porta=_env_int("PORTA", cls.porta),
             porta_https=_env_int("PORTA_CELULAR", cls.porta_https),
             liberar_rede=_env_bool("LIBERAR_CELULAR", cls.liberar_rede),
@@ -204,10 +238,19 @@ PREFERENCIAS_PADRAO: dict[str, Any] = {
     "continuacao_segundos": 6,
     "tema": "sexta",           # "sexta" (âmbar) ou "jarvis" (ciano)
     "maos_sensibilidade": 1.0,
-    "voz": "",                 # sobrescreve a voz do .env se preenchido
+    "voz": "sexta",            # "sexta" (perfil da assistente do traje), uma voz do edge-tts, ou "" (a do .env)
+    "voz_efeito": True,        # efeito "IA do traje" na voz
     "onboarding_concluido": False,
     "saudacao_ao_iniciar": True,
     "atalhos_rapidos": True,   # comandos simples sem passar pela IA (mais rápido)
+    "presenca_camera": False,
+    "expediente_inicio": "09:00",  # "planeja meu dia" encaixa as tarefas neste horário
+    "expediente_fim": "18:00",
+    "almoco": "12:00-13:00",       # vazio = sem bloco de almoço
+    "foco_minutos": 25,
+    "foco_pausa": 5,
+    "foco_distracoes": ["Discord", "WhatsApp", "Telegram", "Steam"],
+    "aviso_reuniao_min": 10,  # protocolo "quando eu voltar ao PC": também procura seu rosto na câmera
 }
 
 # Preferências que o HUD pode alterar diretamente
@@ -226,6 +269,8 @@ class Preferencias:
             try:
                 salvos = json.loads(arquivo.read_text(encoding="utf-8"))
                 if isinstance(salvos, dict):
+                    if "voz_efeito" not in salvos and not salvos.get("voz"):
+                        salvos["voz"] = "sexta"  # quem usava a voz padrão passa para o perfil novo
                     self._dados.update(salvos)
             except (OSError, json.JSONDecodeError):
                 pass

@@ -70,10 +70,21 @@ const NOMES_ACOES: Record<string, string> = {
   print: "print",
   bloquear: "bloqueia o PC",
   executar: "comando",
+  layout: "layout",
+  minimizar_tudo: "minimiza tudo",
+  plano_energia: "energia",
+  nao_perturbe: "não perturbe",
+  modo_escuro: "modo escuro",
+  brilho: "brilho",
+  organizar_downloads: "organiza Downloads",
+  notificar: "avisa no celular",
+  mover_arquivo: "move o arquivo",
 };
 
 export function Rotinas() {
   const rotinas = useHud((s) => s.rotinas);
+  const noPc = useHud((s) => s.cliente?.tipo === "pc");
+  const abrirEditor = useHud((s) => s.acoes.abrirEditor);
   const ativa = useHud((s) => s.rotinaAtiva);
   const avisar = useHud((s) => s.acoes.avisar);
   const [rodando, setRodando] = useState<string | null>(null);
@@ -87,35 +98,64 @@ export function Rotinas() {
       window.setTimeout(() => setRodando(null), 1200);
     }
   };
-  if (!rotinas.length) return <p className="w-[340px] text-sm text-aco">Nenhuma rotina. Edite config/rotinas.yaml ou peça por voz.</p>;
+  const botaoNovo = noPc && (
+    <button
+      type="button"
+      data-clicavel
+      onClick={() => abrirEditor("")}
+      className="mt-2 w-full py-1.5 rounded-full border border-dashed border-[var(--luz)]/50 text-sm text-[var(--luz)] hover:bg-[rgb(var(--luz-rgb)/0.1)]"
+    >
+      + Novo protocolo
+    </button>
+  );
+  if (!rotinas.length)
+    return (
+      <div className="w-[340px]">
+        <p className="text-sm text-aco">Nenhum protocolo. Peça por voz ("toda vez que eu abrir o Valorant…") ou crie um aqui.</p>
+        {botaoNovo}
+      </div>
+    );
   return (
-    <ul className="w-[380px] max-h-[400px] overflow-y-auto rolagem pr-1">
-      {rotinas.map((r, i) => {
-        const emAndamento = ativa?.nome === r.nome;
-        const acoes = [...new Set(r.acoes.map((a) => NOMES_ACOES[a] ?? a))];
-        return (
-          <li key={r.nome} className={`flex items-center gap-3 py-2.5 ${i ? "border-t border-aco/15" : ""}`}>
-            <button
-              type="button"
-              data-clicavel
-              aria-label={`Executar ${r.nome}`}
-              disabled={rodando === r.nome}
-              onClick={() => executar(r)}
-              className="grid place-items-center size-9 shrink-0 rounded-full border border-[var(--luz)]/50 text-[var(--luz)] hover:bg-[rgb(var(--luz-rgb)/0.12)] disabled:opacity-50"
-            >
-              <Icone.Executar tamanho={15} />
-            </button>
-            <span className="min-w-0">
-              <span className="block text-[15px] text-gelo first-letter:uppercase">{r.nome}</span>
-              <span className="block text-xs text-aco truncate">
-                {emAndamento ? `Passo ${ativa!.passo} de ${ativa!.total}` : acoes.join(", ")}
-                {r.horario && !emAndamento ? `. Sozinha às ${r.horario}` : ""}
+    <div className="w-[400px]">
+      <ul className="max-h-[400px] overflow-y-auto rolagem pr-1">
+        {rotinas.map((r, i) => {
+          const emAndamento = ativa?.nome === r.nome;
+          const acoes = [...new Set(r.acoes.map((a) => NOMES_ACOES[a] ?? a))];
+          return (
+            <li key={r.nome} className={`flex items-center gap-3 py-2.5 ${i ? "border-t border-aco/15" : ""}`}>
+              <button
+                type="button"
+                data-clicavel
+                aria-label={`Executar ${r.nome}`}
+                disabled={rodando === r.nome}
+                onClick={() => executar(r)}
+                className="grid place-items-center size-9 shrink-0 rounded-full border border-[var(--luz)]/50 text-[var(--luz)] hover:bg-[rgb(var(--luz-rgb)/0.12)] disabled:opacity-50"
+              >
+                <Icone.Executar tamanho={15} />
+              </button>
+              <span className="min-w-0 flex-1">
+                <span className={`block text-[15px] first-letter:uppercase ${r.ativo === false ? "text-aco/60 line-through" : "text-gelo"}`}>{r.nome}</span>
+                <span className="block text-xs text-aco truncate">
+                  {emAndamento ? `Passo ${ativa!.passo} de ${ativa!.total}` : r.gatilhos?.length ? `${r.gatilhos[0]} → ${acoes.join(", ")}` : acoes.join(", ")}
+                </span>
               </span>
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+              {noPc && (
+                <button
+                  type="button"
+                  data-clicavel
+                  aria-label={`Editar ${r.nome}`}
+                  onClick={() => abrirEditor(r.nome)}
+                  className="shrink-0 px-2 py-1 text-xs text-aco hover:text-[var(--luz)]"
+                >
+                  Editar
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {botaoNovo}
+    </div>
   );
 }
 
@@ -163,8 +203,7 @@ const NIVEL: Record<Atividade["nivel"], string> = { livre: "", confirmada: "conf
 
 export function Atividades({ dados }: { dados: { itens?: Atividade[] } }) {
   const itens = dados?.itens ?? [];
-  if (!itens.length)
-    return <p className="w-[360px] text-sm text-aco">Nada por aqui ainda. Tudo que eu fizer no computador aparece neste registro.</p>;
+  if (!itens.length) return <p className="w-[360px] text-sm text-aco">Nada por aqui ainda. Tudo que eu fizer no computador aparece neste registro.</p>;
   return (
     <ol className="w-[400px] max-h-[400px] overflow-y-auto rolagem pr-1" aria-label="Registro de atividades">
       {itens.map((a, i) => {
@@ -185,5 +224,76 @@ export function Atividades({ dados }: { dados: { itens?: Atividade[] } }) {
         );
       })}
     </ol>
+  );
+}
+
+interface Bloco {
+  tipo: string;
+  valor: unknown;
+  dias?: number[];
+}
+
+export function Protocolo({ dados }: { dados: { protocolo: { nome: string; gatilhos: Bloco[]; condicoes: Bloco[]; acoes: Bloco[] }; resumo: string } }) {
+  const avisar = useHud((s) => s.acoes.avisar);
+  const [enviando, setEnviando] = useState(false);
+  const p = dados?.protocolo;
+  if (!p) return null;
+  const responder = async (aprovar: boolean) => {
+    setEnviando(true);
+    try {
+      const r = await api<{ texto: string }>("/api/pendente", { method: "POST", json: { aprovar } });
+      avisar(r.texto, aprovar ? "sucesso" : "info");
+    } catch (e: any) {
+      avisar(e.message, "erro");
+    } finally {
+      setEnviando(false);
+    }
+  };
+  const valor = (b: Bloco) => (b.valor === true || b.valor === null || b.valor === "" ? "" : Array.isArray(b.valor) ? b.valor.join(", ") : String(b.valor));
+  const coluna = (titulo: string, blocos: Bloco[]) => (
+    <div className="min-w-0">
+      <h3 className="text-xs uppercase tracking-wider text-aco mb-1.5">{titulo}</h3>
+      {blocos.length ? (
+        <ul className="space-y-1.5">
+          {blocos.map((b, i) => (
+            <li key={i} className="border border-[var(--luz)]/35 rounded px-2 py-1.5 text-[13px] text-gelo">
+              <span className="text-[var(--luz)]">{b.tipo.replaceAll("_", " ")}</span> {valor(b)}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-aco/70">sempre</p>
+      )}
+    </div>
+  );
+  return (
+    <div className="w-[460px]">
+      <div className="grid grid-cols-3 gap-3">
+        {coluna("Quando", p.gatilhos)}
+        {coluna("Se", p.condicoes)}
+        {coluna("Então", p.acoes)}
+      </div>
+      <p className="mt-3 text-xs text-aco leading-snug">{dados.resumo}</p>
+      <div className="mt-3 flex gap-2 justify-end">
+        <button
+          type="button"
+          data-clicavel
+          disabled={enviando}
+          onClick={() => responder(false)}
+          className="px-4 py-1.5 rounded-full border border-aco/40 text-sm text-aco hover:text-gelo"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          data-clicavel
+          disabled={enviando}
+          onClick={() => responder(true)}
+          className="px-4 py-1.5 rounded-full border border-[var(--luz)] text-sm text-[var(--luz)] hover:bg-[rgb(var(--luz-rgb)/0.12)]"
+        >
+          Aprovar
+        </button>
+      </div>
+    </div>
   );
 }

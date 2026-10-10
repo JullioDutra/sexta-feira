@@ -1,6 +1,6 @@
 # Sexta-Feira
 
-Assistente pessoal para Windows 11: você fala "Sexta-Feira", ela responde com voz, controla o PC, mostra clima e notícias em hologramas que você pega e arrasta com as mãos na frente da webcam, reconhece seu rosto e acompanha você pelo celular. O cérebro roda no seu computador com o Ollama — sem mensalidade.
+Assistente pessoal para Windows 11: você fala "Sexta-Feira", ela responde com voz, controla o PC, mostra clima e notícias em hologramas que você pega e arrasta com as mãos na frente da webcam, reconhece seu rosto e acompanha você pelo celular. O cérebro pode ser o **Claude** (na nuvem: mais rápido e inteligente, pago por uso) ou um modelo local no **Ollama** (gratuito e offline).
 
 Inspirada no projeto [vannu07/jarvis](https://github.com/vannu07/jarvis), reescrita do zero.
 
@@ -21,7 +21,9 @@ Inspirada no projeto [vannu07/jarvis](https://github.com/vannu07/jarvis), reescr
 | **Rosto** | Cadastro de ~20 amostras em poses diferentes (só vetores numéricos ficam salvos, nenhuma foto). Com a proteção ligada, ela só obedece a você e exige uma piscada para desbloquear, então foto não engana. |
 | **Hologramas** | HUD 3D com núcleo animado e painéis: clima, notícias, sistema, relógio, globo, lembretes, rotinas, câmera, notas e prints. Você chama por voz ou pela barra lateral e mexe com as mãos, o mouse ou o toque. |
 | **Automações** | Abre apps (inclusive da Microsoft Store), sites e pastas; fecha programas; controla mídia e volume; tira print; bloqueia a tela; desliga/reinicia com confirmação; pesquisa e toca no YouTube. |
-| **Rotinas** | "Modo trabalho", "modo jogo", "bom dia"... sequências de ações num arquivo YAML, disparadas por frase ou por horário. Você também cria rotinas por voz. |
+| **Protocolos** | Automações com gatilho → condição → ação. Gatilhos: frase, horário, desbloquear o PC, abrir/fechar um app, bateria baixa, pendrive, arquivo novo numa pasta, rede Wi-Fi, voltar ao PC. Condições: dias, faixa de horário, em reunião, chovendo, rede. Crie por voz ("toda vez que eu abrir o Valorant, fecha o Chrome e coloca o PC no desempenho máximo"): ela mostra o protocolo e você aprova. |
+| **Jornal** | Briefing matinal de até 2 minutos (clima, agenda, 5 notícias do Brasil e 5 de tecnologia). Holograma com abas Destaques / Brasil / Tecnologia / Seus temas / Salvas; a mesma notícia de várias fontes vira uma só. "Me avisa quando sair notícia de RTX 60" gera alerta por voz e no celular. |
+| **Planejamento** | Tarefas com prazo, prioridade e estimativa ("anota: terminar o sistema do campeonato até sexta"), quadro Kanban, "planeja meu dia" (linha do tempo), modo foco com Pomodoro, revisão do dia, plano da semana e agenda do Google/Outlook. |
 | **Lembretes e alarmes** | "Me lembra de ligar pro João amanhã às 10h", "me acorda às 7 todo dia útil", "timer de 15 minutos". |
 | **Celular** | Mesma interface no navegador do celular: segure para falar, escreva, toque nos atalhos, veja os painéis e ouça a resposta no próprio celular. |
 | **Memória** | "Lembra que meu time é o Cruzeiro" — ela guarda e usa nas próximas conversas. |
@@ -50,6 +52,27 @@ Na primeira vez, o Windows pergunta se o Python pode usar a rede: **permita em "
 - No HUD, **F11** deixa em tela cheia — fica ótimo num segundo monitor ou numa TV.
 
 ---
+
+## Escolhendo o cérebro
+
+| | Claude (nuvem) | Ollama (local) |
+|---|---|---|
+| Qualidade | muito alta (Claude Opus 5.5) | depende do modelo que cabe na sua placa |
+| Velocidade | rápida em qualquer PC; prompt em cache por 1 h | ótima só se o modelo couber inteiro na placa de vídeo |
+| Custo | pago por uso (ver abaixo) | grátis |
+| Internet | precisa | não precisa |
+
+**Para usar o Claude:** crie uma chave em [console.anthropic.com](https://console.anthropic.com) (API Keys), coloque em `ANTHROPIC_API_KEY=` no `.env` e reinicie. Com `CEREBRO=auto` (padrão) ela passa a usar o Claude sozinha; sem chave, volta ao Ollama.
+
+- **Dois cérebros:** comandos curtos vão para o **Claude Haiku 5.5** (rápido e baratíssimo) e conversa, análise e planejamento para o **Claude Opus 5.5** (`CLAUDE_MODELO` / `CLAUDE_MODELO_RAPIDO`).
+- **Esforço:** na voz ela pensa pouco para responder rápido (`CLAUDE_ESFORCO_VOZ=low`); no texto, `medium`. Suba para `high` se preferir respostas mais elaboradas.
+- **Custo aproximado:** comandos resolvidos por atalho não custam nada. Um pedido que vai ao Opus custa em torno de US$ 0,005 (com o cache); no Haiku, uma fração disso. Acompanhe o gasto no console da Anthropic e, se quiser, defina um limite mensal por lá.
+- **Recusas:** se um filtro de segurança do Opus recusar um pedido, a própria API tenta de novo com o modelo recomendado (fallback automático, ligado por padrão).
+- **Sem internet** os atalhos continuam funcionando; o resto avisa que o cérebro está fora.
+
+**Se continuar no Ollama e estiver lento:** o log e o HUD agora avisam quando o modelo não coube na placa de vídeo e está rodando na memória RAM/CPU (a causa mais comum de lentidão extrema e de erros de memória). Nesse caso use um modelo menor (`qwen3.5:4b`), reduza `OLLAMA_CONTEXTO` ou passe para o Claude.
+
+**Memória:** a conversa sobrevive a reinícios por até 6 horas (`dados/historico.json`), e ela guarda sozinha fatos pessoais duradouros ("meu time é o Cruzeiro") em `dados/memoria.json`, que entram em todas as conversas.
 
 ## Falando com ela
 
@@ -162,6 +185,56 @@ O reconhecimento facial da Sexta-Feira é bom para o dia a dia, mas não substit
 
 ---
 
+## Planejamento
+
+- **Tarefas por voz:** "anota: terminar o sistema do campeonato até sexta", "anota pagar o boleto amanhã, urgente", "nova tarefa revisar o relatório do projeto Sexta até dia 20, leva 2 horas". Ela entende prazo, prioridade (urgente/sem pressa), estimativa e projeto. "Terminei o boleto", "adia o relatório para segunda", "quais são minhas tarefas?".
+- **Quadro Kanban** (ícone na barra lateral ou "mostra o quadro"): A fazer / Fazendo / Feito. Arraste os cards com o mouse ou use ◀ ▶ (funciona apontando com a mão). Dá para anotar direto no campo de baixo.
+- **"Planeja meu dia":** junta compromissos da agenda, lembretes com horário e o almoço como blocos fixos e encaixa as tarefas por urgência (atrasadas, prazo, prioridade) no seu expediente, com pausa de 15 min a cada ~90 min. Aparece como linha do tempo; o que não couber é avisado.
+- **Modo foco:** "modo foco", "pomodoro de 50 minutos", "pausa o foco", "quanto falta?", "encerra o foco". Liga o não perturbe, fecha as distrações (lista em Ajustes → Planejamento) e segura os alertas de notícias até a pausa — só ela te interrompe.
+- **Revisão do dia** (21h) e **plano da semana** (domingo, 19h) já vêm como protocolos em `config/rotinas.yaml`; ajuste o horário ou desligue no editor de protocolos. Na revisão, o que era para hoje e não foi feito passa para amanhã.
+- **Agenda (opcional):** cole em `AGENDA_ICS` no `.env` o endereço iCal secreto do Google Agenda (Configurações da agenda → "Endereço secreto no formato iCal") ou o link ICS publicado do Outlook. É só leitura, sem login. Os compromissos entram no plano do dia, no briefing e ela avisa minutos antes ("chefe, a daily começa em 10 minutos").
+- **Ajustes → Planejamento:** expediente, almoço, minutos de foco e pausa, distrações e antecedência do aviso de reunião.
+
+## Jornal (central de notícias)
+
+- **"Abre o jornal"** (ou o ícone na barra lateral): abas **Destaques**, **Brasil**, **Tecnologia**, **Seus temas** e **Salvas**. A mesma notícia dada por várias fontes aparece uma vez só, com "(3 fontes)" — e sobe nos destaques.
+- **Toque ou pinça rápida numa notícia:** ela abre a matéria, resume em até 5 frases e lê em voz alta. **Arraste para o lado** (ou toque no marcador) para salvar para depois.
+- Por voz: "lê a segunda notícia de tecnologia", "salva a primeira", "me avisa quando sair notícia de RTX 60", "para de me avisar sobre RTX 60", "quais temas você acompanha?".
+- **Seus temas:** a cada 15 minutos ela procura novidades e avisa por voz, no HUD e no celular — só do que saiu depois que você pediu.
+- **Briefing:** "bom dia" ou "briefing" — saudação, clima, agenda do dia, 5 manchetes do Brasil, 5 de tecnologia e seus temas, em até 2 minutos (a IA escreve o roteiro; sem IA, ela lê as manchetes). Para ouvir todo dia: "agenda o briefing para as 7h30 nos dias úteis" (vira um protocolo que dá para ajustar no editor).
+- **Fontes** em `config/noticias.yaml`: Google Notícias e g1 (Brasil); Tecnoblog, Canaltech, Olhar Digital, The Verge, Hacker News e GitHub em alta (tecnologia). Qualquer feed RSS/Atom serve; crie outras categorias (ex.: `esportes:`) e elas entram nos Destaques.
+
+## Protocolos (automações)
+
+Peça por voz e aprove:
+
+- "Sexta, toda vez que eu abrir o Valorant, fecha o Chrome e coloca o PC no desempenho máximo."
+- "Quando chegar um PDF em Downloads, me avisa no celular."
+- "Quando a bateria ficar abaixo de 15%, coloca no modo economia e baixa o brilho."
+- "Quando eu voltar ao PC, se não estiver em reunião, me dá o resumo do dia."
+
+Ela monta o protocolo, mostra no holograma (Quando / Se / Então) e só salva depois do seu "sim" (ou do botão **Aprovar**). Depois: "desativa o protocolo modo valorant", "apaga o protocolo...", "quais são meus protocolos?".
+
+No arquivo (`config/rotinas.yaml`), o formato completo é:
+
+```yaml
+rotinas:
+  modo valorant:
+    gatilhos:
+      - app_aberto: Valorant            # também: frase, horario, desbloquear, app_fechado,
+    condicoes:                          # bateria_baixa, pendrive, arquivo_novo, wifi, voltar_ao_pc
+      - entre: "18:00-23:59"            # também: dias, em_reuniao, chovendo, wifi
+      - em_reuniao: false
+    passos:
+      - fechar: Chrome
+      - plano_energia: desempenho maximo
+      - notificar: "Modo jogo ligado"   # vai para o celular
+```
+
+Textos podem usar `{app}`, `{arquivo}`, `{nome_arquivo}`, `{rede}`, `{bateria}`. "Em reunião" = outro programa usando o microfone (Teams, Zoom, Meet, Discord). "Voltar ao PC" usa o tempo sem mexer no mouse/teclado; em **Ajustes** dá para ligar a checagem pelo rosto na câmera (`presenca_camera`). Protocolos só disparam de novo depois de 1 minuto.
+
+**Notificar no celular:** chega nos celulares pareados com o HUD aberto. Para receber mesmo com o celular bloqueado, instale o app gratuito [ntfy](https://ntfy.sh), assine um tópico com nome difícil de adivinhar e coloque o mesmo nome em `NTFY_TOPICO` no `.env` (o texto da notificação passa pelo servidor do ntfy).
+
 ## Rotinas e apelidos
 
 Edite `config/rotinas.yaml` (o arquivo explica todas as ações). Exemplo:
@@ -200,6 +273,8 @@ Em `config/apps.yaml` você cria apelidos ("meu jogo" → caminho do .exe, "camp
 | `OLLAMA_MODELO_VISAO` | modelo com visão para "analisa a tela" (vazio = o principal) |
 | `OLLAMA_MANTER_CARREGADO` | quanto tempo o modelo fica na memória sem uso (padrão `4h`; `-1` = sempre) |
 | `PASTAS_ARQUIVOS` | pastas extras para a busca de arquivos, separadas por vírgula |
+| `AGENDA_ICS` | endereços iCal secretos do Google Agenda/Outlook (só leitura) |
+| `NTFY_TOPICO` | tópico do app ntfy para receber notificações com o celular bloqueado |
 | `OLLAMA_PENSAR` | `sim` deixa o modelo "pensar" antes de responder (mais lento) |
 | `WHISPER_MODELO` | `small` (padrão), `base` (mais rápido), `large-v3-turbo` (melhor, com GPU NVIDIA) |
 | `VOZ_MOTOR` | `edge` (voz neural, online) ou `windows` (100% offline) |
@@ -220,11 +295,14 @@ Como "sexta-feira" também é um dia da semana, ela só ativa quando o nome é a
 
 ## Privacidade
 
-Roda no seu PC: ativação por voz, transcrição, cérebro (Ollama), reconhecimento facial e de mãos, lembretes, rotinas e memória. Saem para a internet apenas:
+Roda no seu PC: ativação por voz, transcrição, reconhecimento facial e de mãos, lembretes, rotinas, memória e — com o Ollama — o cérebro. Saem para a internet apenas:
+
+- **cérebro Claude** (se você usar) — o texto dos pedidos que não são atalhos, o histórico recente da conversa, os fatos da memória e os resultados das ferramentas; em "analisa a tela"/"o que é isso?", a imagem; em "resume o que eu copiei", o texto copiado. Tudo vai para a API da Anthropic;
 
 - **clima** — coordenadas da cidade para o Open-Meteo;
-- **notícias** — o assunto pesquisado no Google Notícias;
+- **notícias** — o Jornal baixa os feeds das fontes de `config/noticias.yaml`, os temas que você acompanha são pesquisados no Google Notícias e, ao ler uma matéria, a página dela é aberta;
 - **voz neural** — o texto de cada resposta vai para o serviço de voz da Microsoft (use `VOZ_MOTOR=windows` para ficar 100% offline);
+- **agenda** — o calendário é baixado do endereço iCal que você configurou (Google/Microsoft);
 - **YouTube e pesquisas** — quando você pede.
 
 Seus dados ficam na pasta `dados/` (apague a pasta para zerar tudo). O acesso ao HUD exige uma chave que a própria Sexta-Feira gera, então sites abertos no navegador não conseguem mandar comandos para ela.

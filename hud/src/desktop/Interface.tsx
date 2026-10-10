@@ -5,6 +5,7 @@ import { conexao } from "../lib/socket";
 import { useHud } from "../lib/store";
 import type { TipoHolograma } from "../lib/tipos";
 import { GlifoTipo, Icone } from "../holograms/Glifos";
+import { DOCA_EXTRA, hologramaExtra } from "../extensoes";
 import { dataPorExtenso, useAgora } from "../holograms/Relogio";
 
 export function Cabecalho() {
@@ -31,7 +32,19 @@ export function Cabecalho() {
   );
 }
 
-function Indicador({ ativo, rotulo, children, aoClicar, alerta }: { ativo: boolean; rotulo: string; children: React.ReactNode; aoClicar?: () => void; alerta?: boolean }) {
+function Indicador({
+  ativo,
+  rotulo,
+  children,
+  aoClicar,
+  alerta,
+}: {
+  ativo: boolean;
+  rotulo: string;
+  children: React.ReactNode;
+  aoClicar?: () => void;
+  alerta?: boolean;
+}) {
   const cor = alerta ? "text-coral" : ativo ? "text-[var(--luz)]" : "text-aco";
   const conteudo = (
     <>
@@ -82,9 +95,7 @@ export function Status() {
           {bloqueio.bloqueada ? <Icone.Cadeado tamanho={16} /> : <Icone.CadeadoAberto tamanho={16} />}
         </Indicador>
       </div>
-      <p className="text-xs text-aco">
-        {conectado ? `Cérebro local: ${modelo}` : "Reconectando à Sexta-Feira…"}
-      </p>
+      <p className="text-xs text-aco">{conectado ? nomeCerebro(modelo) : "Reconectando à Sexta-Feira…"}</p>
       {Object.entries(avisos).map(([chave, texto]) => (
         <p key={chave} className="max-w-[420px] text-right text-xs text-coral leading-snug">
           {texto}
@@ -128,9 +139,7 @@ export function Legendas() {
         {palavra ?? ""}
       </p>
       {(ferramenta || rotina) && (
-        <p className="mt-1 text-xs text-aco surgir">
-          {rotina ? `Rotina ${rotina.nome}: passo ${rotina.passo} de ${rotina.total}` : `${ferramenta}…`}
-        </p>
+        <p className="mt-1 text-xs text-aco surgir">{rotina ? `Rotina ${rotina.nome}: passo ${rotina.passo} de ${rotina.total}` : `${ferramenta}…`}</p>
       )}
       <div className={`mt-4 max-w-[760px] legivel transition-opacity duration-700 ${visivel ? "opacity-100" : "opacity-0"}`}>
         {pergunta && <p className="text-base text-aco leading-snug">{pergunta}</p>}
@@ -145,11 +154,21 @@ export function Legendas() {
   );
 }
 
-const DOCA: { tipo: TipoHolograma; rotulo: string }[] = [
+/** "claude-opus-5-5" -> "Cérebro: Claude Opus 5.5"; modelos do Ollama aparecem como estão. */
+function nomeCerebro(modelo: string): string {
+  if (!modelo.startsWith("claude-")) return `Cérebro local: ${modelo}`;
+  const partes = modelo.slice(7).split("-");
+  const nome = partes.filter((p) => !/^\d+$/.test(p)).map((p) => p[0].toUpperCase() + p.slice(1));
+  const versao = partes.filter((p) => /^\d+$/.test(p)).join(".");
+  return `Cérebro: Claude ${nome.join(" ")} ${versao}`.trim();
+}
+
+const DOCA: { tipo: TipoHolograma | (string & {}); rotulo: string }[] = [
   { tipo: "clima", rotulo: "Clima" },
-  { tipo: "noticias", rotulo: "Notícias" },
+  { tipo: "jornal", rotulo: "Jornal" },
+  { tipo: "tarefas", rotulo: "Tarefas" },
   { tipo: "lembretes", rotulo: "Lembretes" },
-  { tipo: "rotinas", rotulo: "Rotinas" },
+  { tipo: "rotinas", rotulo: "Protocolos" },
   { tipo: "sistema", rotulo: "Sistema" },
   { tipo: "relogio", rotulo: "Relógio" },
   { tipo: "globo", rotulo: "Globo" },
@@ -162,7 +181,7 @@ export function Doca({ abrirAjustes }: { abrirAjustes: () => void }) {
   const abertos = useHud((s) => s.hologramas);
   return (
     <nav aria-label="Hologramas" className="absolute left-5 top-1/2 -translate-y-1/2 flex flex-col gap-1 pointer-events-auto">
-      {DOCA.map(({ tipo, rotulo }) => {
+      {[...DOCA, ...DOCA_EXTRA].map(({ tipo, rotulo }) => {
         const aberto = abertos.some((h) => h.tipo === tipo);
         return (
           <button
@@ -180,7 +199,7 @@ export function Doca({ abrirAjustes }: { abrirAjustes: () => void }) {
               aberto ? "text-[var(--luz)] bg-[rgb(var(--luz-rgb)/0.1)]" : "text-aco hover:text-gelo"
             }`}
           >
-            <GlifoTipo tipo={tipo} tamanho={20} />
+            {hologramaExtra(tipo)?.glifo ? hologramaExtra(tipo)!.glifo!(20) : <GlifoTipo tipo={tipo} tamanho={20} />}
             <span className="absolute left-14 whitespace-nowrap text-xs text-gelo/90 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity pointer-events-none">
               {rotulo}
             </span>
@@ -292,9 +311,7 @@ export function BarraComando() {
         aria-label={ocupada ? "Parar" : "Falar com a Sexta-Feira"}
         title={ocupada ? "Parar (Esc)" : "Falar (barra de espaço)"}
         disabled={bloqueada}
-        onClick={() =>
-          api(ocupada ? "/api/parar" : "/api/ouvir", { method: "POST" }).catch((e) => avisar(e.message, "erro"))
-        }
+        onClick={() => api(ocupada ? "/api/parar" : "/api/ouvir", { method: "POST" }).catch((e) => avisar(e.message, "erro"))}
         className="grid place-items-center size-12 rounded-full border border-[var(--luz)]/60 text-[var(--luz)] hover:bg-[rgb(var(--luz-rgb)/0.12)] disabled:opacity-40"
       >
         {ocupada ? <Icone.Parar tamanho={18} /> : <Icone.Microfone tamanho={20} />}
@@ -315,7 +332,11 @@ export function Espelho() {
           {erroCamera ? (
             <p className="aspect-[4/3] grid place-items-center p-3 text-center text-xs text-coral">{erroCamera}</p>
           ) : (
-            <img src={comToken("/api/camera.mjpg")} alt="Sua imagem na câmera, para posicionar as mãos" className="w-full aspect-[4/3] object-cover opacity-80" />
+            <img
+              src={comToken("/api/camera.mjpg")}
+              alt="Sua imagem na câmera, para posicionar as mãos"
+              className="w-full aspect-[4/3] object-cover opacity-80"
+            />
           )}
           <figcaption className="flex items-center justify-between px-1 pt-1.5 text-[11px] text-aco">
             Pinça pega, mão aberta amplia

@@ -19,7 +19,11 @@ from pathlib import Path
 import numpy as np
 
 from ..util.texto import limpar_para_fala
+from . import efeitos
 from .audio import Reprodutor, decodificar, tom
+
+# Perfil "sexta": voz jovem e calma, um pouco mais grave, com o efeito de IA do traje
+PERFIS = {"sexta": {"voz": "pt-BR-ThalitaMultilingualNeural", "velocidade": "+4%", "tom": "-3Hz"}}
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +54,17 @@ class Fala:
     # -- API ------------------------------------------------------------
     @property
     def voz(self) -> str:
-        return self.app.prefs.get("voz") or self.app.cfg.voz
+        escolha = self.app.prefs.get("voz") or self.app.cfg.voz
+        return PERFIS.get(escolha, {}).get("voz", escolha)
+
+    def _prosodia(self) -> tuple[str, str]:
+        perfil = PERFIS.get(self.app.prefs.get("voz") or self.app.cfg.voz)
+        if perfil:
+            return perfil["velocidade"], perfil["tom"]
+        return self.app.cfg.voz_velocidade, self.app.cfg.voz_tom
+
+    def _com_efeito(self) -> bool:
+        return bool(self.app.prefs.get("voz_efeito"))
 
     def falar(self, texto: str) -> None:
         texto = limpar_para_fala(texto or "")
@@ -117,10 +131,18 @@ class Fala:
         if not texto or self.app.cfg.voz_motor == "windows":
             return None
         try:
-            return asyncio.run(asyncio.wait_for(self._edge_bytes(texto), timeout=20)), "audio/mpeg"
+            mp3 = asyncio.run(asyncio.wait_for(self._edge_bytes(texto), timeout=20))
         except Exception as erro:  # noqa: BLE001
             log.warning("Não consegui gerar o áudio para o celular: %s", erro)
             return None
+        if not self._com_efeito():
+            return mp3, "audio/mpeg"
+        try:  # o celular ouve a mesma voz do PC, com o efeito
+            audio, taxa = decodificar(mp3)
+            return efeitos.para_wav(efeitos.traje(audio, taxa), taxa), "audio/wav"
+        except Exception as erro:  # noqa: BLE001
+            log.warning("Efeito de voz falhou no áudio do celular: %s", erro)
+            return mp3, "audio/mpeg"
 
     def encerrar(self) -> None:
         self._rodando = False
@@ -139,7 +161,8 @@ class Fala:
     async def _edge_bytes(self, texto: str) -> bytes:
         import edge_tts
 
-        comunicacao = edge_tts.Communicate(texto, self.voz, rate=self.app.cfg.voz_velocidade, pitch=self.app.cfg.voz_tom,
+        velocidade, tom_voz = self._prosodia()
+        comunicacao = edge_tts.Communicate(texto, self.voz, rate=velocidade, pitch=tom_voz,
                                            connect_timeout=4, receive_timeout=15)
         dados = bytearray()
         async for pedaco in comunicacao.stream():
@@ -150,7 +173,8 @@ class Fala:
         return bytes(dados)
 
     def _sintetizar(self, texto: str) -> tuple[np.ndarray, int]:
-        chave = (self.voz, texto)
+        efeito = self._com_efeito()
+        chave = (self.voz, efeito, texto)
         if chave in self._cache:
             self._cache.move_to_end(chave)
             return self._cache[chave]
@@ -166,6 +190,11 @@ class Fala:
                     self._edge_pausado_ate = time.time() + 300
         if resultado is None:
             resultado = self._sintetizar_windows(texto)
+        if efeito:
+            try:
+                resultado = (efeitos.traje(resultado[0], resultado[1]), resultado[1])
+            except Exception:  # noqa: BLE001 - sem efeito é melhor que sem voz
+                log.exception("Efeito de voz falhou")
         if len(texto) <= 80:
             self._cache[chave] = resultado
             while len(self._cache) > 60:

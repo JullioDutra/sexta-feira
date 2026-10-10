@@ -14,7 +14,13 @@ def verificar_tudo(app) -> list[dict]:
         itens.append({"nome": nome, "ok": ok, "detalhe": detalhe, "dica": dica})
 
     ok, mensagem = app.agente.ollama.verificar()
-    item("Cérebro (Ollama)", ok, mensagem, "" if ok else f"Instale o Ollama e rode: ollama pull {cfg.ollama_modelo}")
+    if cfg.usa_claude():
+        item("Cérebro (Claude)", ok, mensagem, "" if ok else "Confira ANTHROPIC_API_KEY no .env e a internet")
+    else:
+        item("Cérebro (Ollama)", ok, mensagem, "" if ok else f"Instale o Ollama e rode: ollama pull {cfg.ollama_modelo}")
+        aviso = app.agente.ollama.uso_de_memoria() if ok else None
+        if aviso:
+            item("Memória de vídeo", False, aviso, "Use um modelo menor ou CEREBRO=claude")
 
     vosk = (cfg.modelos / "vosk-model-small-pt-0.3").exists()
     item("Ativação por voz (Vosk)", vosk or cfg.ativacao_motor != "vosk", "modelo presente" if vosk else "modelo ausente",
@@ -51,4 +57,7 @@ def verificar_tudo(app) -> list[dict]:
     item("Teste de piscada", (cfg.modelos / MODELO_MARCOS).exists(), MODELO_MARCOS)
     item("Gestos com as mãos", (cfg.modelos / MODELO_MAOS).exists(), MODELO_MAOS)
     item("Câmera", app.camera.erro is None, app.camera.erro or "ok (liga quando precisa)")
+    from . import extensoes
+
+    itens.extend(extensoes.diagnostico(app))
     return itens

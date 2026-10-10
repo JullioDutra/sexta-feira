@@ -71,6 +71,24 @@ class ClienteOllama:
         except httpx.HTTPError as erro:
             log.warning("Não foi possível pré-carregar o modelo: %s", erro)
 
+    def completar(self, sistema: str, texto: str, modelo: str | None = None) -> str:
+        """Pergunta simples, sem ferramentas e sem streaming (resumos, briefing)."""
+        payload: dict[str, Any] = {"model": modelo or self.modelo, "stream": False, "keep_alive": self.manter_carregado,
+                                   "messages": [{"role": "system", "content": sistema}, {"role": "user", "content": texto}],
+                                   "options": {"temperature": 0.4, "num_ctx": self.contexto}}
+        if self._enviar_think:
+            payload["think"] = False
+        try:
+            r = self._http.post("/api/chat", json=payload, timeout=180)
+        except httpx.ConnectError as erro:
+            raise ErroOllama(f"Não consegui falar com o Ollama em {self.url}. Ele está aberto?") from erro
+        except httpx.TimeoutException as erro:
+            raise ErroOllama("O Ollama demorou demais para responder.") from erro
+        if r.status_code != 200:
+            self._erro_http(r.status_code, r.text)
+        conteudo = (r.json().get("message") or {}).get("content", "")
+        return re.sub(r"<think>.*?</think>", "", conteudo, flags=re.S).strip()
+
     def visao(self, pergunta: str, imagens_b64: list[str], sistema: str = "", modelo: str | None = None) -> str:
         """Pergunta sobre imagens a um modelo com visão (sem streaming)."""
         mensagens: list[dict[str, Any]] = []
@@ -169,7 +187,34 @@ class ClienteOllama:
             raise ErroOllama("O Ollama demorou demais para responder.") from erro
         if chamadas:
             yield {"tipo": "ferramentas", "chamadas": chamadas}
-        yield {"tipo": "fim", "texto": "".join(texto), "chamadas": chamadas}
+        yield {"tipo": "fim", "texto": "".join(texto), "chamadas": chamadas, "bruto": None}
+
+    # -- formato da volta das ferramentas (o Claude usa outro) -------------------------
+    @staticmethod
+    def mensagem_assistente(texto: str, chamadas: list[dict], bruto: Any) -> dict[str, Any]:
+        return {"role": "assistant", "content": texto,
+                "tool_calls": [{"function": {"name": c["nome"], "arguments": c["argumentos"]}} for c in chamadas]}
+
+    @staticmethod
+    def mensagens_resultados(chamadas: list[dict], conteudos: list[dict]) -> list[dict[str, Any]]:
+        return [{"role": "tool", "tool_name": c["nome"], "content": json.dumps(r, ensure_ascii=False, default=str)}
+                for c, r in zip(chamadas, conteudos)]
+
+    def uso_de_memoria(self) -> str | None:
+        """Aviso se o modelo carregado não coube inteiro na placa de vídeo (fica MUITO lento)."""
+        try:
+            r = self._http.get("/api/ps", timeout=5)
+            r.raise_for_status()
+        except httpx.HTTPError:
+            return None
+        for m in r.json().get("models", []):
+            total, vram = m.get("size") or 0, m.get("size_vram") or 0
+            if total and vram < total * 0.95:
+                pct_cpu = round(100 * (1 - vram / total))
+                return (f"O modelo {m.get('name')} está {pct_cpu}% na memória RAM/CPU porque não coube na placa de "
+                        f"vídeo — por isso as respostas ficam lentas. Use um modelo menor (ex.: qwen3.5:4b), "
+                        f"diminua OLLAMA_CONTEXTO ou use o cérebro na nuvem (CEREBRO=claude).")
+        return None
 
     def _erro_http(self, status: int, corpo: str) -> None:
         try:

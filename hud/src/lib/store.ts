@@ -1,16 +1,5 @@
 import { create } from "zustand";
-import type {
-  Aviso,
-  Bloqueio,
-  EstadoAssistente,
-  Holograma,
-  InfoRosto,
-  Lembrete,
-  LinhaConversa,
-  Mao,
-  Preferencias,
-  Rotina,
-} from "./tipos";
+import type { Aviso, Bloqueio, EstadoAssistente, Holograma, InfoRosto, Lembrete, LinhaConversa, Mao, Preferencias, Rotina } from "./tipos";
 
 /** Valores que mudam muitas vezes por segundo: ficam fora do React (lidos em requestAnimationFrame). */
 export const tempoReal = {
@@ -48,9 +37,11 @@ export interface EstadoHud {
   rotinaAtiva: { nome: string; passo: number; total: number } | null;
   ferramentaAtual: string | null;
   falaAtual: string;
+  editorProtocolos: string | null; // null = fechado; "" = novo; nome = editando
   acoes: {
     avisar: (texto: string, nivel?: Aviso["nivel"]) => void;
     dispensarAviso: (id: number) => void;
+    abrirEditor: (nome: string | null) => void;
   };
 }
 
@@ -84,6 +75,7 @@ export const useHud = create<EstadoHud>()((set) => ({
   rotinaAtiva: null,
   ferramentaAtual: null,
   falaAtual: "",
+  editorProtocolos: null,
   acoes: {
     avisar: (texto, nivel = "info") => {
       const id = proximoAviso++;
@@ -91,6 +83,7 @@ export const useHud = create<EstadoHud>()((set) => ({
       window.setTimeout(() => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })), nivel === "erro" ? 9000 : 6000);
     },
     dispensarAviso: (id) => set((s) => ({ avisos: s.avisos.filter((a) => a.id !== id) })),
+    abrirEditor: (nome) => set({ editorProtocolos: nome }),
   },
 }));
 
@@ -107,7 +100,7 @@ const NOMES_FERRAMENTAS: Record<string, string> = {
   criar_lembrete: "criando lembrete",
   gerenciar_lembretes: "vendo lembretes",
   rotina: "rotina",
-  criar_rotina: "criando rotina",
+  criar_protocolo: "montando protocolo",
   holograma: "projetando",
   memoria: "memória",
   assistente: "ajustando a mim mesma",
@@ -117,8 +110,20 @@ export function descreverFerramenta(nome: string): string {
   return NOMES_FERRAMENTAS[nome] ?? nome;
 }
 
+const manipuladoresExtras: Record<string, ((evento: any) => void)[]> = {};
+
+/** Extensões (src/extensoes) recebem eventos do WebSocket por aqui. */
+export function aoEvento(tipo: string, funcao: (evento: any) => void): void {
+  (manipuladoresExtras[tipo] ??= []).push(funcao);
+}
+
 /** Aplica um evento vindo do WebSocket ao estado. */
 export function aplicarEvento(e: any): void {
+  try {
+    for (const funcao of manipuladoresExtras[e.tipo] ?? []) funcao(e);
+  } catch (erro) {
+    console.error("Erro numa extensão ao tratar", e.tipo, erro);
+  }
   const set = useHud.setState;
   const get = useHud.getState;
   switch (e.tipo) {
@@ -244,6 +249,21 @@ export function aplicarEvento(e: any): void {
       break;
     case "acesso":
       set({ pin: !!e.pin });
+      break;
+    case "rotinas":
+      set({ rotinas: e.rotinas });
+      break;
+    case "protocolo.disparado":
+      get().acoes.avisar(`Protocolo ${e.nome}: ${e.gatilho}`, "info");
+      break;
+    case "notificacao":
+      get().acoes.avisar(e.texto, "lembrete");
+      try {
+        navigator.vibrate?.([120, 60, 120]);
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification(e.titulo ?? "Sexta-Feira", { body: e.texto });
+      } catch {
+        /* sem suporte a notificações */
+      }
       break;
     default:
       break;

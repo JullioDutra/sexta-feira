@@ -16,13 +16,13 @@ from . import sistema_info
 log = logging.getLogger(__name__)
 
 TIPOS = ["clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "texto",
-         "imagem"]
+         "imagem", "protocolo", "jornal", "tarefas", "plano", "foco"]
 TITULOS = {
     "clima": "Clima", "noticias": "Notícias", "sistema": "Sistema", "relogio": "Relógio", "globo": "Globo",
-    "lembretes": "Lembretes", "rotinas": "Rotinas", "camera": "Câmera", "atividades": "Registro de atividades",
-    "texto": "Nota", "imagem": "Imagem",
+    "lembretes": "Lembretes", "rotinas": "Protocolos", "camera": "Câmera", "atividades": "Registro de atividades",
+    "texto": "Nota", "imagem": "Imagem", "protocolo": "Novo protocolo", "jornal": "Jornal", "tarefas": "Tarefas", "plano": "Plano do dia", "foco": "Modo foco",
 }
-UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades"}
+UNICOS = {"clima", "noticias", "sistema", "relogio", "globo", "lembretes", "rotinas", "camera", "atividades", "protocolo", "jornal", "tarefas", "plano", "foco"}
 
 
 class Hologramas:
@@ -97,6 +97,16 @@ class Hologramas:
             return {"itens": [r.para_dict() for r in app.rotinas.listar()]}
         if tipo == "atividades":
             return app.atividades.para_holograma()
+        if tipo == "jornal":
+            return app.jornal.dados_holograma()
+        if tipo == "tarefas":
+            return app.tarefas.quadro()
+        if tipo not in ("relogio", "camera", "texto", "imagem"):
+            from .. import extensoes
+
+            extra = extensoes.dados_holograma(app, tipo)
+            if extra is not None:
+                return extra
         if tipo == "globo":
             prefs = app.prefs
             if prefs.get("cidade_lat") is not None:

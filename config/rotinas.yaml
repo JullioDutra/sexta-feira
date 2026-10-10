@@ -18,7 +18,9 @@
 #   minimizar_tudo: true      organizar_downloads: true | data (também separa por mês)
 #   plano_energia: economia | equilibrado | alto desempenho | desempenho maximo
 #   nao_perturbe: true|false  modo_escuro: true|false    brilho: 0-100 | mais | menos
+#   foco: 25                  planejar_dia / revisao_dia / plano_semana: true
 #   executar: "comando"       roda um comando do Windows (só vale neste arquivo)
+# Para pausar um protocolo sem apagar: ativo: false
 #
 # Para rodar sozinha num horário, use horario (entre aspas!) e dias:
 #   horario: "07:30"
@@ -62,16 +64,27 @@ rotinas:
       - bloquear: true
 
   modo foco:
-    frases: ["modo foco", "preciso me concentrar"]
+    frases: ["modo foco", "preciso me concentrar", "pomodoro"]
     passos:
-      - falar: "Modo foco ativado. Fechei as distrações."
-      - fechar: "Discord"
-      - nao_perturbe: true
+      - falar: "Modo foco: silenciei as notificações e fechei as distrações. Só eu te interrompo."
       - volume: 20
-      - holograma: relogio
+      - foco: 25                 # minutos por ciclo (pausa e distrações em Ajustes)
 
   fantasma:
     frases: ["protocolo fantasma", "modo fantasma", "alguem chegando"]
     passos:
       - minimizar_tudo: true
       - volume: mudo
+
+  revisao do dia:
+    gatilhos:
+      - horario: "21:00"
+    passos:
+      - revisao_dia: true
+
+  plano da semana:
+    gatilhos:
+      - horario: "19:00"
+        dias: [dom]
+    passos:
+      - plano_semana: true

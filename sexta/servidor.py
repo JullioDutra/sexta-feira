@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, 
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import extensoes
 from .certificado import garantir_certificado
 from .seguranca import Cliente, ErroAcesso
 from .util.rede import ips_locais, nome_do_computador
@@ -121,7 +122,7 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             "rosto": app.rosto.info(),
             "maos_disponivel": app.maos.disponivel(),
             "pin": app.acesso.tem_pin(),
-            "modelo": app.cfg.ollama_modelo,
+            "modelo": app.cfg.modelo_principal,
             "alarme": app.lembretes.alarme_ativo(),
         }
 
@@ -139,6 +140,13 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
         valores = await request.json()
         if not isinstance(valores, dict):
             raise HTTPException(400, "JSON inválido")
+        import re
+
+        for chave in ("expediente_inicio", "expediente_fim"):
+            if chave in valores and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", str(valores[chave])):
+                raise HTTPException(400, "Horário inválido: use HH:MM, por exemplo 09:00.")
+        if valores.get("almoco") and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d", str(valores["almoco"])):
+            raise HTTPException(400, "Almoço inválido: use 12:00-13:00 (ou deixe vazio).")
         cidade = valores.pop("cidade", None)
         cidade = str(cidade).strip() if cidade is not None else ""
         if cidade and cidade not in (app.prefs.get("cidade"), app.prefs.get("cidade_rotulo")):
@@ -410,12 +418,153 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             raise HTTPException(404, resultado.get("resumo"))
         return resultado
 
+    # -------------------------------------------------------------- jornal
+    def _noticia(dados: dict) -> dict:
+        item = app.jornal.por_id(str(dados.get("id") or ""))
+        if item is None:
+            raise HTTPException(404, "Essa notícia não está mais na lista. Atualize o jornal.")
+        return item
+
+    @api.post("/api/jornal/atualizar")
+    async def atualizar_jornal(request: Request, _: Cliente = Depends(autenticado)):
+        aba = (await request.json()).get("aba") or "destaques"
+        dados = await asyncio.to_thread(app.jornal.dados_holograma, aba)
+        app.hologramas.mostrar("jornal", dados, titulo="Jornal")
+        return {"ok": True}
+
+    @api.post("/api/jornal/ler")
+    async def ler_noticia(request: Request, cliente: Cliente = Depends(autenticado)):
+        item = _noticia(await request.json())
+        ctx = app.contexto("texto" if cliente.tipo == "pc" else "celular", cliente)
+        aba, numero = app.jornal.posicao(item)
+        resultado = await asyncio.to_thread(app.registro.executar, "jornal", {"acao": "ler", "aba": aba, "numero": numero}, ctx)
+        if cliente.tipo == "pc" and resultado.get("ok"):
+            app.fala.falar(resultado["resumo"])
+        return {"texto": resultado["resumo"], "link": item.get("link", "")}
+
+    @api.post("/api/jornal/salvar")
+    async def salvar_noticia(request: Request, _: Cliente = Depends(autenticado)):
+        item = _noticia(await request.json())
+        novo = await asyncio.to_thread(app.jornal.salvar, item)
+        return {"ok": True, "texto": "Salva para depois." if novo else "Essa já estava salva."}
+
+    @api.delete("/api/jornal/salvas/{id_}")
+    async def remover_noticia_salva(id_: str, _: Cliente = Depends(autenticado)):
+        if not await asyncio.to_thread(app.jornal.remover_salva, id_):
+            raise HTTPException(404, "Não estava salva.")
+        if app.hologramas.aberto("jornal"):
+            dados = await asyncio.to_thread(app.jornal.dados_holograma, "salvas")
+            app.hologramas.atualizar_tipo("jornal", dados)
+        return {"ok": True}
+
+    # -------------------------------------------------------------- tarefas (quadro Kanban)
+    @api.get("/api/tarefas")
+    def listar_tarefas(_: Cliente = Depends(autenticado)):
+        return app.tarefas.quadro()
+
+    @api.post("/api/tarefas")
+    async def criar_tarefa(request: Request, _: Cliente = Depends(autenticado)):
+        from .habilidades.tarefas import interpretar_tarefa
+
+        texto = str((await request.json()).get("texto") or "").strip()
+        if not texto:
+            raise HTTPException(400, "Escreva a tarefa.")
+        campos = interpretar_tarefa(texto)  # "revisar relatório até sexta, urgente" funciona aqui também
+        try:
+            nova = app.tarefas.criar(campos.pop("titulo"), **campos)
+        except ValueError as erro:
+            raise HTTPException(400, str(erro)) from None
+        app.hologramas.atualizar_tipo("tarefas", app.tarefas.quadro())
+        return nova
+
+    @api.patch("/api/tarefas/{id_}")
+    async def editar_tarefa(id_: int, request: Request, _: Cliente = Depends(autenticado)):
+        from .habilidades.tarefas import interpretar_prazo
+
+        dados = await request.json()
+        if "prazo" in dados and dados["prazo"]:
+            dados["prazo"] = interpretar_prazo(str(dados["prazo"])) if not str(dados["prazo"])[:4].isdigit() \
+                else str(dados["prazo"])[:10]
+        try:
+            tarefa = app.tarefas.atualizar(id_, **dados)
+        except ValueError as erro:
+            raise HTTPException(400, str(erro)) from None
+        if tarefa is None:
+            raise HTTPException(404, "Tarefa não encontrada.")
+        app.hologramas.atualizar_tipo("tarefas", app.tarefas.quadro())
+        return tarefa
+
+    @api.delete("/api/tarefas/{id_}")
+    def apagar_tarefa(id_: int, _: Cliente = Depends(autenticado)):
+        if not app.tarefas.apagar(id_):
+            raise HTTPException(404, "Tarefa não encontrada.")
+        app.hologramas.atualizar_tipo("tarefas", app.tarefas.quadro())
+        return {"ok": True}
+
+    @api.post("/api/foco")
+    async def controlar_foco(request: Request, cliente: Cliente = Depends(autenticado)):
+        acao = str((await request.json()).get("acao") or "")
+        if acao not in ("pausar", "retomar", "encerrar", "iniciar"):
+            raise HTTPException(400, "Ação inválida.")
+        resultado = await asyncio.to_thread(app.registro.executar, "foco", {"acao": acao}, app.contexto("texto", cliente))
+        return {"texto": resultado["resumo"]}
+
+    # -------------------------------------------------------------- protocolos (editor visual)
+    @api.get("/api/protocolos")
+    def protocolos(_: Cliente = Depends(autenticado)):
+        from .habilidades.rotinas import CATALOGO
+
+        return {"protocolos": [r.para_editor() for r in app.rotinas.listar()], "catalogo": CATALOGO,
+                "layouts": app.layouts.nomes()}
+
+    @api.put("/api/protocolos")
+    async def salvar_protocolo(request: Request, _: Cliente = Depends(so_pc)):
+        dados = await request.json()
+        try:
+            rotina = await asyncio.to_thread(app.rotinas.salvar_do_editor, dados, dados.get("nome_antigo") or None)
+        except ValueError as erro:
+            raise HTTPException(400, str(erro)) from None
+        app.atividades.anotar({"ferramenta": "editor_protocolos", "argumentos": {"nome": rotina.nome}, "nivel": 1,
+                               "situacao": "ok", "resumo": f"Protocolo {rotina.nome} salvo no editor.", "canal": "texto"})
+        return rotina.para_editor()
+
+    @api.post("/api/protocolos/{nome}/ativo")
+    async def ativar_protocolo(nome: str, request: Request, _: Cliente = Depends(so_pc)):
+        ativo = bool((await request.json()).get("ativo"))
+        if not await asyncio.to_thread(app.rotinas.definir_ativo, nome, ativo):
+            raise HTTPException(404, "Protocolo não encontrado.")
+        return {"ok": True}
+
+    @api.delete("/api/protocolos/{nome}")
+    async def apagar_protocolo(nome: str, _: Cliente = Depends(so_pc)):
+        if not await asyncio.to_thread(app.rotinas.apagar, nome):
+            raise HTTPException(400, "Só dá para apagar protocolos criados por voz ou no editor. "
+                                     "Os outros ficam em config/rotinas.yaml.")
+        return {"ok": True}
+
+    @api.post("/api/pendente")
+    async def responder_pendente(request: Request, cliente: Cliente = Depends(autenticado)):
+        """Botões Aprovar/Cancelar dos hologramas (mesmo efeito de dizer "sim" ou "não")."""
+        aprovar = bool((await request.json()).get("aprovar"))
+        if app.registro.pendente() is None:
+            raise HTTPException(404, "Não há nada esperando confirmação.")
+        if not aprovar:
+            pendente = app.registro.cancelar_pendente()
+            if pendente and pendente.nome == "criar_protocolo":
+                app.hologramas.fechar(tipo="protocolo")
+            return {"texto": "Cancelado."}
+        ctx = app.contexto("texto" if cliente.tipo == "pc" else "celular", cliente)
+        resultado = await asyncio.to_thread(app.registro.confirmar, ctx, app.verificar_para_acao)
+        app.barramento.publicar("aviso", nivel="sucesso" if resultado.get("ok") else "erro", texto=resultado["resumo"])
+        return {"texto": resultado["resumo"], "ok": resultado.get("ok")}
+
     @api.post("/api/rotinas/recarregar")
     def recarregar_rotinas(_: Cliente = Depends(so_pc)):
         app.rotinas.recarregar()
         app.apps.recarregar()
         app.layouts.recarregar()
         app.terminal.recarregar()
+        app.jornal.recarregar()
         return [r.para_dict() for r in app.rotinas.listar()]
 
     @api.get("/api/prints/{nome}")
@@ -465,6 +614,8 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
                     app.agente.cancelar()
                 elif tipo == "ping":
                     await websocket.send_json({"tipo": "pong", "t": mensagem.get("t")})
+                else:
+                    await extensoes.mensagem_ws(app, cliente, registrado, mensagem, websocket)
         except (WebSocketDisconnect, RuntimeError):
             pass
         except Exception:  # noqa: BLE001
@@ -474,6 +625,9 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             envio.cancel()
             if registrado.quer_maos and not app.barramento.alguem_quer_maos():
                 app.maos.desligar()
+
+    # -------------------------------------------------------------- extensões (Fases 5 e 6)
+    extensoes.rotas(api, app, autenticado, so_pc)
 
     # -------------------------------------------------------------- HUD (arquivos estáticos)
     dist: Path = app.cfg.hud_dist

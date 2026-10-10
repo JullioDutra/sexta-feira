@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 from ..cerebro.ferramentas import CONFIRMAR, LIVRE, ROSTO, P, Registro
@@ -12,7 +13,7 @@ from .clima import ErroClima, ServicoClima
 from .hologramas import TIPOS as TIPOS_HOLOGRAMA
 from .lembretes import REPETICOES
 from .noticias import CATEGORIAS, ErroNoticias
-from .rotinas import ACOES_SEGURAS
+from .rotinas import ACOES_SEGURAS, CONDICOES, GATILHOS
 
 log = logging.getLogger(__name__)
 
@@ -278,11 +279,12 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     # ------------------------------------------------------------------ rotinas
     @ferramenta(
         "rotina",
-        "Executa, lista, apaga ou recarrega (depois de editar os arquivos de rotinas, layouts, terminal) as rotinas — sequências de ações como "
+        "Protocolos e rotinas: executa, lista, apaga, ativa, desativa ou recarrega (depois de editar os arquivos de rotinas, layouts, terminal) as rotinas — sequências de ações como "
         "'modo trabalho' ou 'modo jogo'.",
         direta=True,
-        acao=P("string", "Ação.", enum=["executar", "listar", "apagar", "recarregar"], obrigatorio=True),
-        nome=P("string", "Nome da rotina."),
+        acao=P("string", "Ação.", enum=["executar", "listar", "apagar", "ativar", "desativar", "recarregar"],
+               obrigatorio=True),
+        nome=P("string", "Nome do protocolo/rotina."),
     )
     def rotina(ctx, acao: str, nome: str | None = None):
         rotinas = app.rotinas
@@ -291,6 +293,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
             app.apps.recarregar()
             app.layouts.recarregar()
             app.terminal.recarregar()
+            app.jornal.recarregar()
             return {"ok": True, "resumo": f"Rotinas recarregadas: {len(rotinas.listar())} no total."}
         if acao == "listar":
             itens = rotinas.listar()
@@ -305,6 +308,9 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         if alvo is None:
             disponiveis = ", ".join(r.nome for r in rotinas.listar()) or "nenhuma"
             return {"ok": False, "resumo": f"Não conheço a rotina '{nome}'. Disponíveis: {disponiveis}."}
+        if acao in ("ativar", "desativar"):
+            rotinas.definir_ativo(alvo.nome, acao == "ativar")
+            return {"ok": True, "resumo": f"Protocolo {alvo.nome} {'ativado' if acao == 'ativar' else 'desativado'}."}
         if acao == "apagar":
             if rotinas.apagar(alvo.nome):
                 return {"ok": True, "resumo": f"Rotina {alvo.nome} apagada."}
@@ -315,37 +321,57 @@ def registrar_ferramentas(app, registro: Registro) -> None:
                 "observacao": "A rotina já anuncia o que está fazendo; confirme em no máximo 3 palavras."}
 
     @ferramenta(
-        "criar_rotina",
-        "Cria uma rotina nova a pedido do usuário. Cada passo é {acao, valor}. Ações: falar (texto), abrir (app/site), "
-        "fechar (programa), tocar_youtube (busca), pesquisar (termo), volume (0-100 ou 'mudo'), midia "
-        "(tocar_pausar/proxima/anterior), esperar (segundos), clima, noticias, briefing, lembretes, holograma (tipo), "
-        "print, bloquear.",
+        "criar_protocolo",
+        "Cria um protocolo (automação) a pedido do usuário: 'toda vez que eu abrir o Valorant, fecha o Chrome e "
+        "coloca o PC no desempenho máximo'. Gatilhos: frase, horario (HH:MM), desbloquear, app_aberto, app_fechado, "
+        "bateria_baixa (%), pendrive, arquivo_novo (pasta), wifi (rede), voltar_ao_pc (minutos fora). Condições: "
+        "dias (seg..dom, uteis, fim de semana), entre ('18:00-23:00'), em_reuniao (true/false), chovendo "
+        "(true/false), wifi. Ações {acao, valor}: falar, notificar (no celular), abrir, fechar, layout, "
+        "minimizar_tudo, volume, midia, tocar_youtube, pesquisar, plano_energia, nao_perturbe, modo_escuro, brilho, "
+        "holograma, clima, noticias, briefing, lembretes, organizar_downloads, mover_arquivo (pasta; para "
+        "arquivo_novo), print, bloquear, esperar. Textos podem usar {app}, {nome_arquivo}, {rede}, {bateria}. "
+        "O usuário aprova antes de salvar.",
         direta=True,
-        nome=P("string", "Nome curto, ex.: 'modo estudo'.", obrigatorio=True),
-        passos=P("array", "Passos em ordem.", obrigatorio=True, itens={
+        nome=P("string", "Nome curto, ex.: 'modo valorant'.", obrigatorio=True),
+        gatilhos=P("array", "Quando o protocolo roda.", itens={
+            "type": "object",
+            "properties": {"tipo": {"type": "string", "enum": GATILHOS}, "valor": {"type": "string"},
+                           "dias": {"type": "array", "items": {"type": "string"}}},
+            "required": ["tipo"],
+        }),
+        condicoes=P("array", "Condições opcionais (todas precisam valer).", itens={
+            "type": "object",
+            "properties": {"tipo": {"type": "string", "enum": CONDICOES}, "valor": {"type": "string"}},
+            "required": ["tipo", "valor"],
+        }),
+        passos=P("array", "Ações em ordem.", obrigatorio=True, itens={
             "type": "object",
             "properties": {"acao": {"type": "string", "enum": ACOES_SEGURAS}, "valor": {"type": "string"}},
             "required": ["acao"],
         }),
-        frases=P("array", "Frases que disparam a rotina (além do nome).", itens={"type": "string"}),
-        horario=P("string", "Horário HH:MM para rodar sozinha (opcional)."),
-        dias=P("array", "Dias da semana para o horário: seg, ter, qua, qui, sex, sab, dom.", itens={"type": "string"}),
     )
-    def criar_rotina(ctx, nome: str, passos: list, frases: list | None = None, horario: str | None = None,
-                     dias: list | None = None):
+    def criar_protocolo(ctx, nome: str, passos: list, gatilhos: list | None = None, condicoes: list | None = None):
         try:
-            nova = app.rotinas.criar(nome, passos, frases, horario, dias)
+            rascunho = app.rotinas.rascunho(nome, passos, gatilhos=gatilhos, condicoes=condicoes)
         except ValueError as erro:
-            return {"ok": False, "resumo": str(erro)}
-        app.hologramas.mostrar("rotinas")
-        quando = f" Ela roda sozinha às {horario}." if horario else ""
-        return {"ok": True, "resumo": f"Rotina {nova.nome} criada com {len(nova.passos)} passos.{quando}"}
+            return {"ok": False, "resumo": str(erro), "_direta": False}
+        if ctx.confirmado:
+            salvo = app.rotinas.salvar(rascunho)
+            app.hologramas.fechar(tipo="protocolo")
+            app.hologramas.mostrar("rotinas")
+            return {"ok": True, "resumo": f"Protocolo {salvo.nome} ativo."}
+        app.hologramas.mostrar("protocolo", {"protocolo": rascunho.para_editor(), "resumo": rascunho.resumo()},
+                               titulo=f"Novo protocolo: {rascunho.nome}")
+        args = {"nome": nome, "passos": passos, "gatilhos": gatilhos or [], "condicoes": condicoes or []}
+        app.registro.aguardar("criar_protocolo", args, f"salvar o protocolo {rascunho.nome}", ctx)
+        return {"ok": False, "pendente": True,
+                "resumo": f"Montei o protocolo {rascunho.nome}: {rascunho.resumo()}. Aprova?"}
 
     # ------------------------------------------------------------------ hologramas
     @ferramenta(
         "holograma",
         "Mostra ou fecha hologramas no HUD. Tipos: clima, noticias, sistema, relogio, globo, lembretes, rotinas, camera, "
-        "atividades (registro do que a Sexta fez no PC), texto (anotação/lista que o usuário pedir para exibir).",
+        "atividades (registro do que a Sexta fez no PC), jornal (central de notícias com abas), texto (anotação/lista que o usuário pedir para exibir).",
         direta=True,
         acao=P("string", "Ação.", enum=["mostrar", "fechar", "fechar_todos"], obrigatorio=True),
         tipo=P("string", "Tipo do holograma.", enum=TIPOS_HOLOGRAMA),
@@ -366,6 +392,9 @@ def registrar_ferramentas(app, registro: Registro) -> None:
             return obter_clima(ctx)
         if tipo == "noticias":
             return obter_noticias(ctx)
+        if tipo == "jornal":
+            h.mostrar("jornal", app.jornal.dados_holograma(), titulo="Jornal")
+            return {"ok": True, "resumo": "Jornal na tela."}
         if tipo == "texto":
             h.mostrar("texto", {"texto": conteudo or ""}, titulo=titulo or "Nota")
         elif tipo == "camera":
@@ -632,7 +661,7 @@ def registrar_ferramentas_pc(app, registro: Registro) -> None:
             b64 = visao.para_base64(imagem)
         except Exception as erro:  # noqa: BLE001
             return {"ok": False, "resumo": f"Não consegui capturar a {'câmera' if fonte == 'camera' else 'tela'}: {erro}"}
-        modelo = sexta.cfg.ollama_modelo_visao or None
+        modelo = None if sexta.cfg.usa_claude() else (sexta.cfg.ollama_modelo_visao or None)
         resposta = sexta.agente.ollama.visao(pergunta, [b64], visao.instrucao(fonte, ctx.canal), modelo=modelo)
         if fonte == "tela" and ctx.canal != "voz":
             sexta.hologramas.mostrar("texto", {"texto": resposta}, titulo="Análise da tela")
@@ -757,3 +786,239 @@ def registrar_ferramentas_pc(app, registro: Registro) -> None:
             return {"ok": True, "resumo": app.atividades.resumo_de_hoje()}
         app.hologramas.mostrar("atividades")
         return {"ok": True, "resumo": "Registro de atividades na tela."}
+
+    registrar_ferramentas_jornal(app, registro)
+
+
+# ---------------------------------------------------------------------------
+# Fase 3: central de notícias
+# ---------------------------------------------------------------------------
+
+LEITURA_SISTEMA = ("Você é a Sexta-Feira. Resuma a matéria abaixo para ser FALADA em voz alta, em português do Brasil, "
+                   "em no máximo 5 frases claras: o fato principal, os números ou nomes importantes e por que importa. "
+                   "Sem markdown, listas nem links.")
+
+
+def registrar_ferramentas_jornal(app, registro: Registro) -> None:
+    from .jornal import ABAS
+
+    ferramenta = registro.ferramenta
+
+    def achar(aba: str | None, numero: int | None):
+        aba = aba if aba in ABAS else "destaques"
+        return app.jornal.item(aba, int(numero or 1))
+
+    @ferramenta(
+        "jornal",
+        "Central de notícias: mostrar o holograma Jornal (abas destaques, brasil, tecnologia, temas, salvas), "
+        "fazer o briefing do dia agora, ler (resumir) a notícia N de uma aba, salvar a notícia N para depois, "
+        "gerenciar os temas que o usuário acompanha ('me avisa quando sair notícia de RTX 60') e agendar o "
+        "briefing matinal num horário.",
+        direta=True,
+        acao=P("string", "Ação.", enum=["mostrar", "briefing", "ler", "salvar", "temas", "adicionar_tema",
+                                        "remover_tema", "agendar_briefing"], obrigatorio=True),
+        aba=P("string", "Aba (padrão destaques).", enum=ABAS),
+        numero=P("integer", "Para ler/salvar: posição da notícia na aba (1 = a primeira)."),
+        tema=P("string", "Para os temas: o assunto, ex.: 'RTX 60', 'EA FC 27'."),
+        horario=P("string", "Para agendar_briefing: HH:MM."),
+        dias=P("array", "Para agendar_briefing: dias (seg..dom, uteis, todos). Padrão: todos.", itens={"type": "string"}),
+    )
+    def jornal(ctx, acao: str, aba: str | None = None, numero: int | None = None, tema: str | None = None,
+               horario: str | None = None, dias: list | None = None):
+        j = app.jornal
+        if acao == "briefing":
+            return {"ok": True, "resumo": app.briefing(ctx)}
+        if acao == "mostrar":
+            dados = j.dados_holograma(aba or "destaques")
+            app.hologramas.mostrar("jornal", dados, titulo="Jornal")
+            itens = dados["abas"][dados["aba"]]
+            if not itens:
+                return {"ok": True, "resumo": "Jornal na tela, mas não encontrei notícias agora."}
+            return {"ok": True, "resumo": "Na tela. Os destaques: " + "; ".join(i["titulo"] for i in itens[:3]) + "."}
+        if acao in ("ler", "salvar"):
+            item = achar(aba, numero)
+            if item is None:
+                return {"ok": False, "resumo": "Não achei essa notícia. Abra o jornal primeiro.", "_direta": True}
+            if acao == "salvar":
+                novo = j.salvar(item)
+                return {"ok": True, "resumo": "Salva para depois." if novo else "Essa já estava salva."}
+            texto = j.texto_da_materia(item)
+            resumo = ""
+            if len(texto) > 200:
+                try:
+                    resumo = app.agente.completar(LEITURA_SISTEMA, f"Título: {item['titulo']}\n\n{texto}")
+                except Exception as erro:  # noqa: BLE001
+                    log.info("Resumo da matéria sem IA: %s", erro)
+            resumo = resumo or f"{item['titulo']}. {texto[:400]}".strip()
+            leitura = {"titulo": item["titulo"], "texto": resumo, "link": item.get("link", ""), "ts": time.time()}
+            aberto = next((h for h in app.hologramas.lista() if h["tipo"] == "jornal"), None)
+            if aberto:  # mostra a leitura dentro do próprio Jornal
+                app.hologramas.atualizar_tipo("jornal", {**aberto["dados"], "leitura": leitura})
+            else:
+                app.hologramas.mostrar("texto", {"texto": f"{item['titulo']}\n\n{resumo}\n\n{item.get('link', '')}"},
+                                       titulo=", ".join(item.get("fontes") or [item.get("fonte", "Notícia")]))
+            return {"ok": True, "resumo": resumo}
+        if acao == "temas":
+            temas = [t["tema"] for t in j.temas()]
+            return {"ok": True, "resumo": ("Acompanho: " + ", ".join(temas) + ".") if temas
+                    else "Você ainda não pediu para eu acompanhar nenhum tema."}
+        if acao in ("adicionar_tema", "remover_tema"):
+            if not tema:
+                return {"ok": False, "resumo": "Qual assunto?"}
+            if acao == "adicionar_tema":
+                novo = j.adicionar_tema(tema)
+                return {"ok": True, "resumo": f"Combinado: aviso quando sair notícia sobre {tema}." if novo
+                        else f"Já estou de olho em {tema}."}
+            removidos = j.remover_tema(tema)
+            return {"ok": bool(removidos), "resumo": f"Parei de acompanhar {', '.join(removidos)}." if removidos
+                    else f"Não acompanhava {tema}."}
+        # agendar_briefing: vira um protocolo de horário (dá para editar no editor de protocolos)
+        from .rotinas import _hora
+
+        hora = _hora(horario or "")
+        if not hora:
+            return {"ok": False, "resumo": "Em que horário? Ex.: 7:30."}
+        app.rotinas.salvar(app.rotinas.rascunho(
+            "briefing matinal", [{"acao": "briefing", "valor": "true"}],
+            gatilhos=[{"tipo": "horario", "valor": hora, "dias": dias or ["todos"]}]))
+        return {"ok": True, "resumo": f"Briefing agendado para as {hora}."}
+
+    registrar_ferramentas_planejamento(app, registro)
+
+
+# ---------------------------------------------------------------------------
+# Fase 4: planejamento de atividades
+# ---------------------------------------------------------------------------
+
+def registrar_ferramentas_planejamento(app, registro: Registro) -> None:
+    from datetime import date
+
+    from . import planejador
+    from .tarefas import PRIORIDADES, STATUS, interpretar_prazo
+
+    ferramenta = registro.ferramenta
+
+    def data_prazo(texto: str | None):
+        if not texto:
+            return None
+        try:
+            return date.fromisoformat(texto.strip())
+        except ValueError:
+            return interpretar_prazo(texto)
+
+    @ferramenta(
+        "tarefas",
+        "Tarefas e projetos (quadro Kanban): criar ('anota: terminar o sistema até sexta'), listar, concluir, "
+        "mover entre a_fazer/fazendo/feito, adiar, apagar e mostrar o quadro em holograma.",
+        direta=True, nivel=lambda a: CONFIRMAR if a.get("acao") == "apagar" else LIVRE,
+        descrever=lambda a: f"apagar a tarefa {a.get('alvo', '')}",
+        acao=P("string", "Ação.", enum=["criar", "listar", "concluir", "mover", "adiar", "apagar", "mostrar_quadro"],
+               obrigatorio=True),
+        titulo=P("string", "Para criar: o que fazer, sem o prazo. Ex.: 'terminar o sistema do campeonato'."),
+        prazo=P("string", "Prazo como o usuário falou: 'sexta', 'amanhã', 'dia 20', 'fim do mês'. Para adiar: o novo prazo."),
+        prioridade=P("string", "Prioridade.", enum=PRIORIDADES),
+        estimativa=P("integer", "Tempo estimado em minutos."),
+        projeto=P("string", "Projeto (opcional)."),
+        alvo=P("string", "Para concluir/mover/adiar/apagar: parte do título da tarefa ou o número dela."),
+        status=P("string", "Para mover: a coluna de destino.", enum=STATUS),
+    )
+    def tarefas(ctx, acao: str, titulo: str | None = None, prazo: str | None = None, prioridade: str | None = None,
+                estimativa: int | None = None, projeto: str | None = None, alvo: str | None = None,
+                status: str | None = None):
+        t = app.tarefas
+        if acao == "criar":
+            if not titulo:
+                return {"ok": False, "resumo": "O que devo anotar?"}
+            data = data_prazo(prazo)
+            nova = t.criar(titulo, data, prioridade or "media", estimativa, projeto or "")
+            quando = f" para {nova['prazo_texto']}" if nova["prazo_texto"] else ""
+            if app.hologramas.aberto("tarefas"):
+                app.hologramas.atualizar_tipo("tarefas", t.quadro())
+            return {"ok": True, "resumo": f"Anotado: {nova['titulo']}{quando}."}
+        if acao in ("listar", "mostrar_quadro"):
+            app.hologramas.mostrar("tarefas", t.quadro(), titulo="Tarefas")
+            pendentes = t.pendentes()
+            if not pendentes:
+                return {"ok": True, "resumo": "Nenhuma tarefa pendente. Quadro limpo."}
+            itens = "; ".join(f"{p['titulo']}" + (f" ({p['prazo_texto']})" if p["prazo_texto"] else "") for p in pendentes[:4])
+            return {"ok": True, "resumo": f"Você tem {len(pendentes)} pendente{'s' if len(pendentes) > 1 else ''}: {itens}."}
+        tarefa = t.encontrar(alvo or titulo or "")
+        if tarefa is None:
+            return {"ok": False, "resumo": f"Não achei a tarefa '{alvo or titulo}'.", "_direta": True}
+        if acao == "concluir":
+            t.atualizar(tarefa["id"], status="feito")
+            restantes = len(t.pendentes())
+            return {"ok": True, "resumo": f"Feito: {tarefa['titulo']}. " + (f"Faltam {restantes}." if restantes else "Tudo em dia!")}
+        if acao == "mover":
+            if status not in STATUS:
+                return {"ok": False, "resumo": "Para qual coluna? A fazer, fazendo ou feito."}
+            t.atualizar(tarefa["id"], status=status)
+            return {"ok": True, "resumo": f"{tarefa['titulo']}: {status.replace('_', ' ')}."}
+        if acao == "adiar":
+            data = data_prazo(prazo or "amanhã")
+            if data is None:
+                return {"ok": False, "resumo": "Para quando?"}
+            atualizada = t.atualizar(tarefa["id"], prazo=data)
+            return {"ok": True, "resumo": f"{tarefa['titulo']} ficou para {atualizada['prazo_texto']}."}
+        t.apagar(tarefa["id"])
+        return {"ok": True, "resumo": f"Tarefa apagada: {tarefa['titulo']}."}
+
+    @ferramenta(
+        "planejar",
+        "Planejamento: 'planeja meu dia' (monta blocos de horário com tarefas, lembretes e compromissos e mostra a "
+        "linha do tempo), revisão do dia (o que foi feito e o que passa para amanhã) e plano da semana.",
+        direta=True,
+        acao=P("string", "Ação.", enum=["dia", "revisao_dia", "semana"], obrigatorio=True),
+    )
+    def planejar(ctx, acao: str):
+        hoje = date.today()
+        if acao == "revisao_dia":
+            return {"ok": True, "resumo": planejador.revisao_do_dia(app, hoje)}
+        if acao == "semana":
+            resumo, dias = planejador.plano_da_semana(app, hoje)
+            app.hologramas.mostrar("plano", {"semana": dias}, titulo="Plano da semana")
+            return {"ok": True, "resumo": resumo}
+        from datetime import datetime
+
+        prefs = app.prefs
+        blocos, sobras = planejador.planejar_dia(
+            datetime.now(), app.tarefas.pendentes(), planejador.blocos_fixos(app, hoje),
+            prefs.get("expediente_inicio") or "09:00", prefs.get("expediente_fim") or "18:00", prefs.get("almoco") or None)
+        app.hologramas.mostrar("plano", {"blocos": [b.para_dict() for b in blocos], "sobras": [s["titulo"] for s in sobras],
+                                         "data": hoje.strftime("%d/%m")}, titulo="Plano do dia")
+        return {"ok": True, "resumo": planejador.resumo_do_plano(blocos, sobras)}
+
+    @ferramenta(
+        "foco",
+        "Modo foco (Pomodoro): iniciar (silencia notificações e fecha distrações), pausar, retomar, encerrar ou "
+        "dizer quanto falta.",
+        direta=True,
+        acao=P("string", "Ação.", enum=["iniciar", "pausar", "retomar", "encerrar", "status"], obrigatorio=True),
+        minutos=P("integer", "Minutos de foco por ciclo (padrão 25)."),
+        pausa=P("integer", "Minutos de pausa (padrão 5)."),
+        ciclos=P("integer", "Quantos ciclos (padrão 4)."),
+        tarefa=P("string", "Tarefa em que vai focar (opcional)."),
+    )
+    def foco(ctx, acao: str, minutos: int | None = None, pausa: int | None = None, ciclos: int | None = None,
+             tarefa: str | None = None):
+        f = app.foco
+        if acao == "iniciar":
+            alvo = app.tarefas.encontrar(tarefa) if tarefa else None
+            if alvo:
+                app.tarefas.atualizar(alvo["id"], status="fazendo")
+            e = f.iniciar(minutos, pausa, ciclos, alvo["titulo"] if alvo else tarefa)
+            em = f" em {e['tarefa']}" if e["tarefa"] else ""
+            return {"ok": True, "resumo": f"Foco{em} por {e['minutos']} minutos. Notificações silenciadas."}
+        if acao == "pausar":
+            return {"ok": True, "resumo": "Foco pausado." if f.pausar() else "Não há foco rodando."}
+        if acao == "retomar":
+            return {"ok": True, "resumo": "Retomando." if f.retomar() else "Não há foco pausado."}
+        if acao == "encerrar":
+            e = f.encerrar()
+            return {"ok": True, "resumo": "Foco encerrado. Notificações de volta." if e else "Não há foco rodando."}
+        e = f.estado()
+        if not e:
+            return {"ok": True, "resumo": "O modo foco está desligado."}
+        minutos_restantes = max(1, round(e["restante"] / 60))
+        return {"ok": True, "resumo": f"{'Pausa' if e['fase'] == 'pausa' else 'Foco'}: faltam {minutos_restantes} minutos, "
+                                      f"ciclo {e['ciclo']} de {e['ciclos']}."}

@@ -130,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{marca}] {item['nome']}: {item['detalhe']}" + (f"\n      → {item['dica']}" if item["dica"] else ""))
         return 0
 
-    logging.getLogger("sexta").info("Iniciando a Sexta-Feira %s (modelo: %s)", app.versao, cfg.ollama_modelo)
+    logging.getLogger("sexta").info("Iniciando a Sexta-Feira %s (cérebro: %s)", app.versao, cfg.modelo_principal)
     app.executar()
     return 0
 

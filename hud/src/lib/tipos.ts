@@ -10,12 +10,17 @@ export type TipoHolograma =
   | "rotinas"
   | "camera"
   | "atividades"
+  | "protocolo"
+  | "jornal"
+  | "tarefas"
+  | "plano"
+  | "foco"
   | "texto"
   | "imagem";
 
 export interface Holograma {
   id: string;
-  tipo: TipoHolograma;
+  tipo: TipoHolograma | (string & {}); // tipos extras vêm das extensões
   titulo: string;
   dados: any;
   criado: number;
@@ -38,6 +43,14 @@ export interface Preferencias {
   tema: "sexta" | "jarvis";
   maos_sensibilidade: number;
   voz: string;
+  voz_efeito: boolean;
+  expediente_inicio: string;
+  expediente_fim: string;
+  almoco: string;
+  foco_minutos: number;
+  foco_pausa: number;
+  foco_distracoes: string[];
+  aviso_reuniao_min: number;
   onboarding_concluido: boolean;
   saudacao_ao_iniciar: boolean;
   atalhos_rapidos: boolean;
@@ -61,6 +74,8 @@ export interface Rotina {
   passos: number;
   criada_pela_ia: boolean;
   acoes: string[];
+  ativo?: boolean;
+  gatilhos?: string[];
 }
 
 export interface LinhaConversa {
