@@ -503,3 +503,33 @@ Em **Privacidade**, na lista do que sai do PC:
 - **Criar** com o [HyperFrames](https://github.com/heygen-com/hyperframes) (HTML animado → MP4): "cria um vídeo de 15 segundos anunciando meu canal", "faz uma intro animada com o texto X" ("vertical" ou "quadrado" mudam o formato). A IA escreve a composição, confere com o `hyperframes lint` e renderiza.
 - Tudo roda em segundo plano — o holograma **Vídeos** mostra o progresso, a prévia e os botões Abrir/Pasta — e sai num arquivo novo em `Vídeos\Sexta-Feira`: o original nunca é alterado.
 - **Requisitos:** FFmpeg (`winget install Gyan.FFmpeg`); para criar vídeos, Node.js 22+ (`winget install OpenJS.NodeJS.LTS`) e internet na hora de renderizar (o render baixa um Chrome sem interface e a biblioteca de animação). Ajustes → **Vídeos** mostra o que está instalado.
+
+## Agentes autônomos
+
+Ela coloca agentes para trabalhar sozinhos em segundo plano enquanto você faz outra coisa — vários ao mesmo tempo.
+
+- **Por voz:** "coloca um agente para pesquisar as melhores placas de vídeo até 3 mil reais", "agente navegador, abre o site X e pega o preço do produto", "coloca o agente programador para corrigir os testes do projeto bolaocopa", "status dos agentes", "o que os agentes estão fazendo?", "aprova o agente", "nega o agente", "cancela o agente navegador".
+- **Tipos:**
+  - **Navegador:** controla um navegador próprio com o [agent-browser](https://github.com/vercel-labs/agent-browser) e o [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) (rede, console, desempenho).
+  - **Pesquisador:** busca na web, lê as páginas e entrega um relatório com fontes.
+  - **Programador:** roda o Claude Code na pasta do projeto, com o método [Superpowers](https://github.com/obra/superpowers) (plano → testes → verificação antes de dizer que terminou). Só trabalha nas pastas de projeto que você liberar e sempre pede "sim" para começar.
+  - **Engenharia reversa / segurança:** usa o [REA](https://github.com/morluto/rea) (binários, apps Electron/JavaScript, .NET, APK, sites e capturas de rede) e as análises locais de segurança para explicar como algo funciona, com evidências.
+  - **Vídeo** e **automação do PC**: usam as ferramentas de vídeo e as do próprio PC.
+- **Ela sabe se cumpriu:** todo agente termina com uma conferência — ✓ concluído, ≈ parcial ou ✗ falhou, com a evidência — e o que aprendeu vai para a memória (as análises de engenharia reversa viram **conhecimento**).
+- **Segurança:** ações sensíveis param o agente em "aguardando aprovação" até você aprovar no HUD, no celular ou por voz (o "sim" solto da conversa não aprova agentes). Em **Acesso completo**, as ações do PC que pedem "sim" rodam direto; ferramentas que executam o programa analisado, mexem em processos ou apagam algo continuam pedindo aprovação.
+- **Holograma Agentes:** passos ao vivo, status, aprovar/cancelar e criar um agente escolhendo o tipo. Ajustes → **Agentes**: limites de passos e tempo, pastas de projeto, programas instalados e servidores MCP (botão **Testar**).
+- **Em protocolos:** passo `agente: "pesquisador: ..."` (veja o exemplo em `config/rotinas.yaml`).
+- **Requisitos (Windows):**
+  - Node.js LTS (`winget install OpenJS.NodeJS.LTS`) — para o REA, o Chrome DevTools MCP e o agent-browser;
+  - agent-browser: `npm install -g agent-browser` e depois `agent-browser install`;
+  - Claude Code: no PowerShell, `irm https://claude.ai/install.ps1 | iex`, depois rode `claude` uma vez para entrar na conta;
+  - Superpowers: `claude plugin marketplace add obra/superpowers-marketplace` e `claude plugin install superpowers@superpowers-marketplace`;
+  - REA (opcional, para análise de binários nativos ele usa o Ghidra ou o Hopper): veja `npx rea-agents setup`.
+
+## Segurança (análise de arquivos e revisão do PC)
+
+- **Por voz:** "analisa o arquivo setup.exe", "o último download é seguro?", "esse programa é seguro?" (a janela ativa), "revisa a segurança do PC", "quem está usando a internet?", "o que inicia com o Windows?", "quais portas estão abertas?".
+- **A análise é estática: o arquivo nunca é executado.** Ela olha hashes, tipo real (e extensão disfarçada), assinatura digital, funções que o programa usa (rede, injeção, criptografia, persistência, teclado...), textos internos (URLs, IPs, registro), apps Electron (ASAR), .NET, Office com macro, atalhos e scripts perigosos (download + execução, PowerShell codificado, desligar o Defender...). O veredito vem como **baixo, médio ou alto risco**, com os motivos, as evidências e os limites — ela nunca afirma "é vírus" sem prova.
+- **Revisão do PC** (sem administrador): Defender e outros antivírus, firewall, atualizações, UAC, área de trabalho remota, inicialização, tarefas agendadas, portas abertas, conexões por programa, programas sem assinatura ou rodando de pastas temporárias e extensões do Chrome/Edge/Brave — em ordem de prioridade, com o que fazer. Desativar um item da inicialização pede confirmação e é reversível.
+- Cada análise fica no histórico (holograma **Segurança**) e na memória dela ("aquele instalador de ontem era assinado?"). Para ir mais fundo (como o programa faz algo), ela sugere o agente de engenharia reversa.
+- **Opcional:** `VIRUSTOTAL_API_KEY` no `.env` (só o hash sai do PC, com confirmação). Revisão automática semanal: Ajustes → **Segurança**.

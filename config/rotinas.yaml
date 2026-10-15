@@ -103,3 +103,22 @@ rotinas:
     passos:
       - tradutor: desligar
       - personalidade: amigavel
+
+  # Segurança e agentes (Fase 7). Exemplos desligados: troque para ativo: true para usar.
+  revisao de seguranca de domingo:
+    ativo: false
+    frases: ["revisão de segurança semanal"]
+    gatilhos:
+      - horario: "10:00"
+        dias: [dom]
+    passos:
+      - revisao_seguranca: true
+
+  pesquisa de ia da manha:
+    ativo: false
+    frases: ["pesquisa de ia"]
+    gatilhos:
+      - horario: "08:00"
+        dias: [uteis]
+    passos:
+      - agente: "pesquisador: as novidades mais importantes de IA das últimas 24 horas, com fontes"
