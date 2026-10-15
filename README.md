@@ -533,3 +533,40 @@ Ela coloca agentes para trabalhar sozinhos em segundo plano enquanto você faz o
 - **Revisão do PC** (sem administrador): Defender e outros antivírus, firewall, atualizações, UAC, área de trabalho remota, inicialização, tarefas agendadas, portas abertas, conexões por programa, programas sem assinatura ou rodando de pastas temporárias e extensões do Chrome/Edge/Brave — em ordem de prioridade, com o que fazer. Desativar um item da inicialização pede confirmação e é reversível.
 - Cada análise fica no histórico (holograma **Segurança**) e na memória dela ("aquele instalador de ontem era assinado?"). Para ir mais fundo (como o programa faz algo), ela sugere o agente de engenharia reversa.
 - **Opcional:** `VIRUSTOTAL_API_KEY` no `.env` (só o hash sai do PC, com confirmação). Revisão automática semanal: Ajustes → **Segurança**.
+
+## Tarefas aprendidas (ela aprende e faz sozinha)
+
+Ela aprende tarefas de três jeitos e depois executa sozinha — por voz, por protocolo ou num horário:
+
+- **Ensinando:** "aprende a tarefa relatório semanal: abre o Excel, atualiza a planilha de vendas, exporta em PDF e salva em Documentos/Relatórios". O cérebro transforma a explicação num roteiro (objetivo, passos, que agente usar, como conferir).
+- **Mostrando:** "começa a gravar a tarefa modo noite" → você pede as coisas normalmente ("volume 20", "modo escuro", "abre o Spotify") → "termina a gravação". Os pedidos que deram certo viram uma sequência que ela repete igualzinho, sem IA ("cancela a gravação" descarta).
+- **Pelos agentes:** quando um agente termina com sucesso (✓), o caminho que deu certo vira um roteiro guardado na memória — e um próximo agente com objetivo parecido já começa sabendo. "Salva isso como tarefa cotação do dólar" transforma a última execução numa tarefa.
+- **Executar:** "faz a tarefa relatório semanal" (ou uma das frases que ela sugeriu). Tarefa gravada: repete os comandos em segundo plano conferindo cada um — se um passo falhar ou pedir confirmação, ela para e avisa (repetir nunca aprova nada sozinha). Tarefa ensinada: um agente faz, seguindo o roteiro, e confere no fim.
+- **Ela melhora:** cada execução conta acertos e erros; o roteiro é atualizado com a última execução que deu certo, e o que falhou vira lição na memória.
+- **Sozinha no horário:** "faz a tarefa relatório semanal toda segunda às 9h" (ou "todo dia", "nos dias úteis") vira um protocolo. Em protocolos, use a ação `tarefa: <nome>`.
+- "Quais tarefas você sabe fazer?" abre o holograma **Tarefas aprendidas** (executar, esquecer, ver os passos e ensinar uma nova digitando). "Esquece a tarefa X" apaga.
+
+## Traje (inicialização, diagnóstico, alertas e overlay de jogo)
+
+- Ao ligar, a sequência **"sistemas online"** confere cada módulo (cérebro, microfone, câmera, voz, rosto, gestos, agenda, jornal, protocolos, extensões) e fala o resultado (desligue em Ajustes → Traje).
+- **"Status do traje"** / "diagnóstico do traje": temperaturas de CPU e GPU, uso e memória da placa de vídeo, discos (espaço e saúde), rede (ping e Wi-Fi), atualizações pendentes, saúde da bateria e um resumo de segurança. Temperatura da CPU: instale o [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) e deixe aberto como administrador.
+- **Alertas proativos:** CPU/GPU quentes por 5 minutos (limites em Ajustes), chuva chegando nas próximas 2 horas (precisa da cidade definida) e disco do sistema quase cheio — por voz, no HUD e no celular.
+- **Modo jogo automático:** ao abrir um jogo (Steam, Epic, Riot, Xbox, GOG ou a sua lista), desempenho máximo e não perturbe; tudo volta ao fechar. O **overlay** (FPS, CPU/GPU, RAM, ping) aparece no canto do monitor do jogo em modo janela ou tela cheia sem bordas (não em tela cheia exclusiva). FPS: baixe o [Intel PresentMon](https://github.com/GameTechDev/PresentMon/releases) para `dados/ferramentas/` (rode como administrador ou entre no grupo "Performance Log Users"). Por voz: "liga/desliga o overlay", "liga/desliga o modo jogo automático".
+
+## Protocolo Sentinela, Casa Limpa e "Onde eu parei?"
+
+- **Sentinela:** "ativa o protocolo sentinela" ao sair. Ela bloqueia o Windows e vigia pela webcam (a luz da câmera pisca a cada ~8 s enquanto está armada). Se alguém desconhecido aparecer ou mexer no PC sem você na frente, ela tira uma foto (só em `dados/sentinela/`, nunca enviada), registra no histórico de segurança e na memória e avisa no celular — sem falar nada. Quando vê o seu rosto, desarma sozinha; "desativa o sentinela" confere o rosto. Em Ajustes → Protocolo Sentinela dá para armar sozinho quando você sai (X minutos sem uso e sem o seu rosto). Cadastre o rosto antes; para avisos com o celular bloqueado, configure `NTFY_TOPICO`.
+- **Casa Limpa:** "protocolo casa limpa" / "faz uma faxina no PC" (com o seu "sim"): fecha os programas abertos (cada um pode pedir para salvar), organiza Downloads e apaga temporários com mais de 24 horas.
+- **Onde eu parei?:** a cada 5 minutos de uso ela anota programas, arquivos recentes e páginas da sessão (só no PC, `dados/sessoes.json`, as 10 últimas). "Onde eu parei?" mostra a sessão anterior e reabre o que você escolher.
+
+## Oficina 3D e visualizador de música
+
+- "Abre o modelo do capacete na oficina", "mostra o modelo 3d da turbina": seus arquivos STL, OBJ, GLB, GLTF, FBX e 3MF viram holograma. Arraste ou faça pinça para girar, rodinha ou +/− para aproximar; "explode as peças" / "junta as peças", "gira o modelo" / "para de girar", "fecha a oficina".
+- "Liga o visualizador": espectro holográfico que reage ao som do PC (Windows; a captura só roda com o visualizador aberto). O protocolo **festa** ("modo festa") toca música, ajusta o volume e liga o visualizador.
+
+## Celular mãos livres
+
+- No celular, toque em **Mãos livres** e deixe a página aberta (a tela fica acesa). Diga "Sexta-Feira, …" de longe: o celular manda o áudio ao PC, que reconhece o nome, entende o pedido e responde em voz só no celular. "Sexta-Feira" de novo interrompe. Com a Sexta bloqueada, desbloqueie com o PIN.
+- O celular avisa quando um agente pede aprovação ("Sexta-Feira, aprova o agente") e quando há alerta de segurança.
+- Pelo celular: "tira um print do PC e me manda" (a imagem chega na conversa), "o que está rodando aí", "trava o PC".
+- Requer o endereço **https** do QR code e a palavra de ativação ligada (Vosk: `pip install vosk` e `python -m sexta baixar`).
