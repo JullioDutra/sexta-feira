@@ -495,3 +495,11 @@ Na tabela de **Configuração (`.env`)**:
 Em **Privacidade**, na lista do que sai do PC:
 
 - **memória dos documentos** — os arquivos são lidos e indexados só no seu PC (`dados/documentos.db`). A cada pergunta, apenas a pergunta e os trechos escolhidos (até 6, de ~900 caracteres) vão para o cérebro: para a API da Anthropic se você usa o Claude; com o Ollama, nada sai do PC. Uma pasta tirada da memória deixa de aparecer nas respostas na hora. Para apagar o índice, apague `dados/documentos.db` (ele é refeito na próxima leitura).
+
+## Vídeos (editar e criar)
+
+- **Editar** (FFmpeg, no seu PC): "corta o vídeo da viagem do 0:30 ao 1:15", "junta os vídeos praia, piscina e show", "comprime o último vídeo para o WhatsApp" (ou "pra 8 MB"), "converte o vídeo X para mp4", "faz um GIF do vídeo X do 0:05 ao 0:10", "extrai o áudio do vídeo X", "tira o áudio do vídeo X", "acelera o vídeo X em 3x", "deixa o vídeo X em câmera lenta", "faz um corte vertical do vídeo X com fundo desfocado".
+- **Legendas automáticas** (Whisper, no próprio PC): "coloca legendas no vídeo X" (na imagem) ou "gera legenda do vídeo X" (só o `.srt`).
+- **Criar** com o [HyperFrames](https://github.com/heygen-com/hyperframes) (HTML animado → MP4): "cria um vídeo de 15 segundos anunciando meu canal", "faz uma intro animada com o texto X" ("vertical" ou "quadrado" mudam o formato). A IA escreve a composição, confere com o `hyperframes lint` e renderiza.
+- Tudo roda em segundo plano — o holograma **Vídeos** mostra o progresso, a prévia e os botões Abrir/Pasta — e sai num arquivo novo em `Vídeos\Sexta-Feira`: o original nunca é alterado.
+- **Requisitos:** FFmpeg (`winget install Gyan.FFmpeg`); para criar vídeos, Node.js 22+ (`winget install OpenJS.NodeJS.LTS`) e internet na hora de renderizar (o render baixa um Chrome sem interface e a biblioteca de animação). Ajustes → **Vídeos** mostra o que está instalado.
