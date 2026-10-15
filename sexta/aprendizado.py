@@ -44,6 +44,8 @@ class Aprendizado:
         self._parar = threading.Event()
         self._thread: threading.Thread | None = None
         self.ultimo_episodio: int | None = None
+        # extensões que querem ver cada pedido resolvido: funcao(pedido, ctx, caminho, resposta)
+        self.ouvintes: list = []
 
     # ------------------------------------------------------------------ episódios
     def registrar(self, pedido: str, ctx, caminho: str, resposta: str, ms: int) -> None:
@@ -55,6 +57,11 @@ class Aprendizado:
             log.exception("Não consegui registrar o episódio")
             return
         self.ultimo_episodio = episodio
+        for ouvinte in list(self.ouvintes):
+            try:
+                ouvinte(pedido, ctx, caminho, resposta)
+            except Exception:  # noqa: BLE001
+                log.exception("Erro num ouvinte do aprendizado")
         for r in ctx.resultados:
             verificacao = r.get("_verificar")
             if callable(verificacao):

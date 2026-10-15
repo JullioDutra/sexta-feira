@@ -7,6 +7,7 @@ class Conexao {
   private ws: WebSocket | null = null;
   private tentativas = 0;
   private ouvintes = new Set<Ouvinte>();
+  private aoAbrirLista = new Set<() => void>();
   private querMaos = false;
   private parado = false;
 
@@ -27,6 +28,7 @@ class Conexao {
       abriu = true;
       this.tentativas = 0;
       if (this.querMaos) this.enviar({ tipo: "maos", ligar: true });
+      this.aoAbrirLista.forEach((f) => f());
     };
     ws.onmessage = (m) => {
       let evento: any;
@@ -62,6 +64,24 @@ class Conexao {
 
   enviar(mensagem: object): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(mensagem));
+  }
+
+  /** Manda um quadro binário (áudio do mãos livres). Descarta se a conexão estiver fechada ou atrasada. */
+  enviarBinario(dados: ArrayBuffer | ArrayBufferView): boolean {
+    const ws = this.ws;
+    if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 256 * 1024) return false;
+    ws.send(dados);
+    return true;
+  }
+
+  /** Chamado a cada (re)conexão — ex.: religar o mãos livres no servidor. */
+  aoAbrir(funcao: () => void): () => void {
+    this.aoAbrirLista.add(funcao);
+    return () => this.aoAbrirLista.delete(funcao);
+  }
+
+  aberta(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
   }
 
   /** Avisa o servidor se este HUD quer receber os pontos das mãos. */

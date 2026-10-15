@@ -104,6 +104,20 @@ TIPOS: dict[str, TipoAgente] = {t.nome: t for t in [
         "Só analise o que é do usuário ou o que ele tem direito de analisar. Separe o que foi verificado do que é "
         "hipótese. O relatório final termina com uma seção 'Aprendizado' com o que vale guardar."),
     TipoAgente(
+        "ciberseguranca", "de cibersegurança", "Auditoria de segurança adaptativa dos ativos do usuário (site, PC, rede, programas).",
+        ("ciberseguranca_*", "seguranca_*", "rea__*", "web_buscar", "web_ler", "memoria_buscar"),
+        "Você é uma auditora de segurança DEFENSIVA e adaptativa. Só inspeciona ativos do usuário (o site dele, o PC "
+        "dele, a rede local dele, programas dele) ou o que ele autorizou; nunca ataca, invade, explora falhas nem "
+        "testa alvos de terceiros — se o objetivo pedir algo assim, recuse e explique. Plano adaptativo: (1) triagem "
+        "— entenda o alvo e veja na memória (memoria_buscar) a última auditoria dele; (2) inspeção com a ferramenta "
+        "certa — site: ciberseguranca_site; rede: ciberseguranca_rede; PC: seguranca_revisar_pc; programa/arquivo: "
+        "seguranca_analisar_arquivo; entender a fundo como algo funciona: as ferramentas rea__* (análise estática, "
+        "nunca executando o alvo); (3) aprofunde conforme o que achar (ex.: achou um serviço exposto, investigue o "
+        "programa por trás); (4) relatório priorizado por risco, cada achado com a evidência e o que fazer para "
+        "corrigir, em linguagem simples. Separe o que foi verificado do que é hipótese. Termine com uma seção "
+        "'Aprendizado' com o que mudou desde a última auditoria e o que guardar.",
+        confirmar_inicio=True),
+    TipoAgente(
         "video", "de vídeo", "Cria e edita vídeos (HyperFrames e ffmpeg).",
         ("video_*", "arquivos", "memoria_buscar"),
         "Você cria e edita vídeos com as ferramentas video_*. Planeje o resultado (duração, cenas, saída), "
@@ -522,6 +536,7 @@ def _do_mcp(app, ferramenta) -> FerramentaDoAgente:
 
 class GerenteAgentes:
     def __init__(self, app, arquivo: Path) -> None:
+        self.ao_terminar: list = []
         self.app = app
         self.arquivo = arquivo
         self.pasta = arquivo.parent / "agentes"
@@ -593,6 +608,11 @@ class GerenteAgentes:
         self.publicar(agora=True)
         if agente.status != "cancelado":
             self._avisar_fim(agente)
+        for funcao in list(self.ao_terminar):  # ex.: tarefas aprendidas guardam o roteiro do que deu certo
+            try:
+                funcao(agente)
+            except Exception:  # noqa: BLE001
+                log.exception("Erro num ouvinte do fim de agente")
 
     def cancelar(self, referencia: str | None = None, todos: bool = False) -> list[AgenteAutonomo]:
         alvos = self.ativos() if todos else [a for a in [self.encontrar(referencia, so_ativos=True)] if a]
@@ -859,7 +879,8 @@ _TIPO_FALADO = {
     "pesquisador": "pesquisador", "de pesquisa": "pesquisador",
     "programador": "programador", "de programacao": "programador", "de codigo": "programador",
     "engenharia reversa": "engenharia_reversa", "de engenharia reversa": "engenharia_reversa",
-    "de seguranca": "engenharia_reversa", "seguranca": "engenharia_reversa",
+    "de seguranca": "ciberseguranca", "seguranca": "ciberseguranca", "de ciberseguranca": "ciberseguranca",
+    "de ciberseguranca": "ciberseguranca", "ciberseguranca": "ciberseguranca", "de auditoria": "ciberseguranca",
     "video": "video", "de video": "video", "editor de video": "video",
     "automacao": "automacao", "de automacao": "automacao", "do pc": "automacao", "do computador": "automacao",
 }
@@ -868,8 +889,11 @@ _TIPO_ALTERNATIVAS = "|".join(sorted((re.escape(k) for k in _TIPO_FALADO), key=l
 _INFERIR = [
     ("programador", r"\b(programa|codigo|implementa|refatora|corrige o bug|bug|teste[s]? unitario|funcao|projeto|"
                     r"repositorio|commit|endpoint|api do meu)\b"),
+    ("ciberseguranca", r"\b(audita|auditoria|pentest|verifica a seguranca|seguranca d[eo] (meu |nosso )?(site|rede|"
+                       r"sistema|servidor)|vulnerab\w*|rede (interna|local)|o que (esta|ta) exposto|superficie de "
+                       r"ataque|esta seguro meu|minha rede)\b"),
     ("engenharia_reversa", r"\b(engenharia reversa|descompila|binario|executavel|\.exe|apk|malware|e seguro|"
-                           r"seguranca|como o app|como o programa|como o site .* funciona|analisa o (app|programa))\b"),
+                           r"como o app|como o programa|como o site .* funciona|analisa o (app|programa))\b"),
     ("video", r"\b(video|videos|clipe|legenda|corta o|edita o|montagem|mp4)\b"),
     ("navegador", r"\b(abre o site|abre a pagina|entra no site|entra na pagina|navega|preenche|formulario|"
                   r"clica|faz login|site d[aeo])\b"),

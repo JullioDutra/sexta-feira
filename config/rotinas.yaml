@@ -122,3 +122,20 @@ rotinas:
         dias: [uteis]
     passos:
       - agente: "pesquisador: as novidades mais importantes de IA das últimas 24 horas, com fontes"
+
+  # Oficina e Sentinela (Fases 5 e 6)
+  festa:
+    frases: ["protocolo festa", "modo festa", "bora festa"]
+    passos:
+      - falar: "Protocolo festa ativado. Solta o som!"
+      - tocar_youtube: "playlist festa brasileira"
+      - volume: 60
+      - visualizador: ligar
+
+  fim do expediente:
+    ativo: false
+    frases: ["encerrar o dia", "fim do expediente"]
+    passos:
+      - fechar_tudo: true
+      - limpar_temporarios: true
+      - falar: "Tudo fechado. Até amanhã."

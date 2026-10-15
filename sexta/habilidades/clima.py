@@ -6,7 +6,7 @@ import logging
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -116,6 +116,35 @@ class ServicoClima:
             self._cache_previsao[chave] = (time.time(), dados)
         return dados
 
+    def precipitacao_curta(self, lat: float, lon: float) -> dict:
+        """Chuva prevista a cada 15 minutos nas próximas 2 horas (``minutely_15`` do Open-Meteo); cache de 10 min.
+
+        Devolve ``{"agora": {"hora": iso local, "mm": ...}, "passos": [{"hora": iso local, "mm": ...}], "offset": s}``.
+        No Open-Meteo cada passo soma a chuva dos 15 minutos anteriores à hora dele."""
+        chave = ("curta", round(lat, 3), round(lon, 3))
+        with self._lock:
+            em_cache = self._cache_previsao.get(chave)
+            if em_cache and time.time() - em_cache[0] < 600:
+                return em_cache[1]
+        params = {"latitude": lat, "longitude": lon, "timezone": "auto", "minutely_15": "precipitation",
+                  "forecast_minutely_15": 9, "current": "precipitation"}
+        try:
+            r = self.http.get(PREVISAO, params=params)
+            r.raise_for_status()
+        except httpx.HTTPError as erro:
+            raise ErroClima("Não consegui acessar o serviço de clima agora.") from erro
+        bruto = r.json()
+        quinze = bruto.get("minutely_15") or {}
+        passos = [{"hora": h, "mm": float(mm or 0)} for h, mm in zip(quinze.get("time") or [],
+                                                                       quinze.get("precipitation") or [])]
+        atual = bruto.get("current") or {}
+        dados = {"agora": {"hora": atual.get("time"), "mm": float(atual.get("precipitation") or 0)},
+                 "passos": passos, "offset": int(bruto.get("utc_offset_seconds") or 0)}
+        with self._lock:
+            self._cache_previsao[chave] = (time.time(), dados)
+        return dados
+
+
     # ------------------------------------------------------------------
     def obter(self, local: dict) -> dict:
         """Dados prontos para o holograma."""
@@ -191,3 +220,27 @@ class ServicoClima:
             chuva = f", chuva {dia['chuva']}%" if dia.get("chuva") is not None else ""
             partes.append(f"{nome}: {dia['descricao']}, de {dia['min']} a {dia['max']} graus{chuva}.")
         return " ".join(partes)
+
+
+def minutos_ate_chuva(dados: dict, limite_mm: float = 0.2, janela_min: int = 60,
+                      agora: datetime | None = None) -> int | None:
+    """Em quantos minutos começa a chover (estimativa), pela :meth:`ServicoClima.precipitacao_curta`.
+
+    0 = a qualquer momento; ``None`` se já está chovendo ou se não há chuva >= ``limite_mm`` na janela."""
+    if (dados.get("agora") or {}).get("mm", 0) >= limite_mm:
+        return None
+    local = agora or (datetime.now(timezone.utc) + timedelta(seconds=dados.get("offset", 0))).replace(tzinfo=None)
+    for passo in dados.get("passos") or []:
+        try:
+            fim = datetime.fromisoformat(passo["hora"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        inicio = fim - timedelta(minutes=15)
+        if fim <= local:
+            continue
+        if passo["mm"] >= limite_mm:
+            if inicio <= local:
+                return 0  # seco agora, mas o passo atual já tem chuva: começa a qualquer momento
+            minutos = (inicio - local).total_seconds() / 60
+            return max(1, round(minutos)) if minutos <= janela_min else None
+    return None

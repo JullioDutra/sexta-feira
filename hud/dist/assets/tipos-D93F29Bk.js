@@ -1,0 +1,1 @@
+function e(e){if(!e)return``;let t=new Date(e);if(Number.isNaN(t.getTime()))return e;let n=new Date,r=t.toLocaleTimeString(`pt-BR`,{hour:`2-digit`,minute:`2-digit`});return t.toDateString()===n.toDateString()?`hoje, ${r}`:`${t.toLocaleDateString(`pt-BR`,{day:`2-digit`,month:`2-digit`})} ${r}`}export{e as t};
