@@ -1,0 +1,35 @@
+# Servidores MCP que os agentes da Sexta-Feira podem usar (https://modelcontextprotocol.io).
+# Cada servidor vira um conjunto de ferramentas com o prefixo do nome: rea__..., chrome-devtools__...
+# Eles só são iniciados quando um agente precisa e são encerrados quando a Sexta-Feira fecha.
+#
+# Campos de cada servidor:
+#   comando:     programa a rodar (no Windows, "npx" é chamado por "cmd.exe /d /c npx ..." sozinho)
+#   args:        argumentos
+#   habilitado:  auto (liga se o comando existir neste PC), true ou false
+#   nivel:       livre ou confirmar — segurança padrão das ferramentas deste servidor
+#   livres:      ferramentas que rodam sem perguntar mesmo com nivel: confirmar (aceita * no nome)
+#   confirmar:   ferramentas que sempre pedem a sua aprovação (aceita * no nome)
+#   timeout:     segundos por chamada (padrão 120)
+#   env:         variáveis de ambiente extras
+#
+# Ferramentas que o próprio servidor marca como só-leitura rodam direto; as marcadas como destrutivas
+# sempre pedem aprovação. Para adicionar outro servidor, copie um bloco abaixo.
+
+servidores:
+  # REA — engenharia reversa (binários, Electron/JS, .NET, APK, sites). https://github.com/morluto/rea
+  # Requer Node.js 20+. A primeira execução baixa o pacote. Ghidra/JDK são opcionais (veja o README do REA).
+  rea:
+    comando: npx
+    args: ["-y", "rea-agents@latest", "mcp"]
+    habilitado: auto
+    nivel: confirmar
+    timeout: 600
+
+  # Chrome DevTools MCP — controla um Chrome de verdade (navegar, clicar, ler a página, rede, desempenho).
+  # https://github.com/ChromeDevTools/chrome-devtools-mcp  (requer Node.js 20+ e o Google Chrome)
+  chrome-devtools:
+    comando: npx
+    args: ["-y", "chrome-devtools-mcp@latest", "--isolated"]
+    habilitado: auto
+    nivel: livre
+    confirmar: ["evaluate_script", "upload_file"]
