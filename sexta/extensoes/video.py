@@ -98,8 +98,8 @@ _ENCHIMENTO = {"e", "o", "a", "no", "na", "os", "as", "de", "do", "da", "aos", "
 def _norm(texto: str) -> str:
     """Como ``normalizar``, mas mantém a vírgula/ponto decimal ("1,5 minuto") e os dois-pontos ("1:15")."""
     t = sem_acentos(str(texto or "").lower().replace("-", " "))
-    t = re.sub(r"(\d)[.,](\d)", r"\1\x00\2", t)
-    t = re.sub(r"[^a-z0-9:\x00\s]", " ", t).replace("\x00", ".")
+    t = re.sub(r"(\d)[.,](\d)", r"\1#\2", t)
+    t = re.sub(r"[^a-z0-9:#\s]", " ", t).replace("#", ".")
     return re.sub(r"\s+", " ", t).strip()
 
 
@@ -1565,10 +1565,11 @@ def registrar(app, registro) -> None:
 
 # -- atalhos sem IA ------------------------------------------------------------------------------------
 
-_V = r"(?:o |um |meu )?(?:video|arquivo|clipe)"
+_V = r"(?:o |um |meu |esse |este )?(?:ultimo |mais recente )?(?:video|arquivo|clipe)"
 _ALVO = r"(?P<alvo>.*?)"
-_CORTAR = re.compile(rf"^(?:corta|corte|cortar|recorta|recorte|apara)\s+{_V}\s*{_ALVO}\s+"
-                     r"(?P<trecho>(?:do|de|da|dos|desde|entre|a partir|so|somente|apenas|deixando|os primeiros|os ultimos)\b.*)$")
+_CORTAR = re.compile(rf"^(?:corta|corte|cortar|recorta|recorte|apara)\s+{_V}\b\s*(?P<resto>.+)$")
+_INICIO_TRECHO = re.compile(r"\b(?:do|de|da|dos|desde|entre|a partir|so|somente|apenas|deixando|"
+                            r"os primeiros|os ultimos|primeiros|ultimos|ate)\b")
 _CORTAR_TRECHO = re.compile(rf"^(?:corta|corte|recorta|pega|separa|extrai)\s+(?:o trecho|um trecho|so o trecho|a parte)\s+"
                             rf"(?P<trecho>.+?)\s+d[oa]\s+(?:video|arquivo|clipe)\s*{_ALVO}$")
 _EXTRAIR_AUDIO = re.compile(rf"^(?:extrai|extraia|extrair|separa|separe|salva|salve|pega|exporta)\s+(?:o |so o )?(?:audio|som)"
@@ -1581,10 +1582,9 @@ _COMPRIMIR = re.compile(rf"^(?:comprime|comprima|comprimir|compacta|compacte|dim
                         r"(?P<destino>whatsapp|zap|discord|email|e mail|telegram|\d+(?:[.,]\d+)?\s*(?:mb|mega|megas)))?$")
 _CONVERTER = re.compile(rf"^(?:converte|converta|converter|transforma|transforme|passa|salva)\s+{_V}\s*{_ALVO}\s+"
                         r"(?:para|pra|em)\s+(?:o formato\s+|um\s+|uma\s+)?(?P<formato>mp4|webm|mkv|mov|avi|gif|mp3|m4a|wav)$")
-_GIF = re.compile(rf"^(?:faz|faca|fazer|cria|crie|gera|gere|monta)\s+(?:um |uma )?gif\s+d[oa]\s+(?:video\s+)?{_ALVO}"
-                  r"(?:\s+(?P<trecho>(?:do|de|dos|entre|a partir|os primeiros|os ultimos)\b.*))?$")
+_GIF = re.compile(r"^(?:faz|faca|fazer|cria|crie|gera|gere|monta)\s+(?:um |uma )?gif\s+d[oa]\s+(?:video\s+)?(?P<resto>.+)$")
 _VELOCIDADE = re.compile(rf"^(?P<verbo>acelera|acelere|desacelera|desacelere)\s+{_V}\s*{_ALVO}"
-                         r"(?:\s+(?:em|para|pra|ate)\s+(?P<fator>\d+(?:[.,]\d+)?)\s*(?:x|vezes))?$")
+                         r"(?:\s+(?:em|para|pra|ate)\s+(?P<fator>\d+(?:[., ]\d+)?)\s*(?:x|vezes))?$")
 _LENTA = re.compile(rf"^(?:deixa|deixe|coloca|poe|faz|faca)\s+{_V}\s*{_ALVO}\s+(?:em )?(?:camera lenta|slow motion|mais lento)$")
 _LEGENDAS = re.compile(rf"^(?P<verbo>coloca|coloque|poe|ponha|bota|adiciona|adicione|queima|gera|gere|cria|crie|faz|faca|transcreve)\s+"
                        rf"(?:a |as |uma )?(?:legendas?|legendagem)(?:\s+automaticas?)?\s+(?:n[oa]|para o|pro|do|da|em)\s+"
@@ -1593,9 +1593,8 @@ _LEGENDAR = re.compile(rf"^legenda\s+{_V}\s*{_ALVO}$")
 _VERTICAL = re.compile(rf"^(?:faz|faca|fazer|cria|crie|gera|gere|transforma|transforme|deixa|deixe|corta|recorta|converte|passa)\s+"
                        r"(?:um |uma |o |a )?(?:corte |versao |video |recorte )?(?:em |no formato |para o formato |pra )?"
                        r"(?:vertical|9:16|9 16|para (?:o )?(?:tiktok|reels|shorts)|pro (?:tiktok|reels|shorts))\s+"
-                       rf"(?:d[oa]\s+)?(?:video\s+)?{_ALVO}"
-                       r"(?:\s+(?P<fundo>com (?:o )?fundo(?: desfocado)?|inteiro|sem cortar))?"
-                       r"(?:\s+(?P<trecho>(?:do|de|dos|entre|a partir)\b.*))?$")
+                       r"(?:d[oa]\s+)?(?:video\s+)?(?P<resto>.+?)"
+                       r"(?:\s+(?P<fundo>com (?:o )?fundo(?: desfocado)?|inteiro|sem cortar))?$")
 _VERTICAL_2 = re.compile(rf"^(?:deixa|deixe|transforma|transforme|converte|passa)\s+{_V}\s*{_ALVO}\s+"
                          r"(?:em |para |pra )?(?:vertical|9:16|9 16)$")
 _JUNTAR = re.compile(r"^(?:junta|junte|juntar|une|una|unir|emenda|emende|concatena)\s+(?:os |esses |estes )?(?:videos?|arquivos)\s+(?P<lista>.+)$")
@@ -1606,8 +1605,8 @@ _MOSTRAR = re.compile(r"^(?:mostra|mostre|abre|abra|exibe)\s+(?:o |os |a |as )?(
                       r"(?:meus )?(?:videos(?: gerados| editados)?|trabalhos de video|edicoes de video|renderizacoes)$")
 _STATUS = re.compile(r"^(?:como (?:esta|estao|ta|tao)|qual (?:e )?o (?:status|progresso) d[oa]s?|quanto falta (?:pr[oa]|para o|para a)?)\s*"
                      r"(?:o |a |os |as )?(?:meu |minha )?(?:video|videos|renderizacao|edicao|legenda|legendas|corte|gif|trabalho de video)$")
-_CANCELAR = re.compile(r"^(?:cancela|cancele|para|pare|interrompe|aborta)\s+(?:o |a )?(?:video|renderizacao|edicao|"
-                       r"trabalho de video|corte|legendagem|render)$")
+_CANCELAR = re.compile(r"^(?:(?:cancela|cancele|interrompe|aborta)\s+(?:o |a )?(?:video|renderizacao|edicao|"
+                       r"trabalho de video|corte|legendagem|render)|para (?:de )?(?:renderizar|a renderizacao|a edicao))$")
 _ABRIR_ULTIMO = re.compile(r"^(?:abre|abra|toca|mostra|reproduz)\s+(?:o )?(?:ultimo )?(?:video|arquivo) (?:que voce (?:gerou|fez|editou|criou)|gerado)$")
 
 _ALVO_VAZIO = {"", "o", "a", "ele", "isso", "esse", "este"}
@@ -1615,7 +1614,7 @@ _IDIOMAS = {"ingles": "en", "espanhol": "es", "portugues": "pt"}
 
 
 def _video_do_alvo(alvo: str) -> str:
-    alvo = re.sub(r"^(?:chamado|chamada|com nome|de nome)\s+", "", (alvo or "").strip())
+    alvo = re.sub(r"^(?:chamado|chamada|com nome|de nome|do|da|de)\s+", "", (alvo or "").strip())
     return "o último vídeo" if alvo in _ALVO_VAZIO else alvo
 
 
@@ -1624,12 +1623,25 @@ def _separar_lista(texto: str) -> list[str]:
     return [_video_do_alvo(re.sub(r"^(?:o |a |video )+", "", p).strip()) for p in partes if p.strip()]
 
 
+def separar_trecho(resto: str) -> tuple[str, str | None]:
+    """ "casamento do 0:30 ao 1:15" -> ("casamento", "do 0:30 ao 1:15"): o trecho é o primeiro sufixo que vira
+    um intervalo de tempo (assim "do casamento" continua sendo parte do nome)."""
+    for m in _INICIO_TRECHO.finditer(resto):
+        trecho = resto[m.start():]
+        if interpretar_intervalo(trecho) is not None:
+            return resto[:m.start()].strip(), trecho
+    return resto.strip(), None
+
+
 def atalho(t: str, ctx, rodar, original: str | None):
     editar_ = lambda args: rodar("video_editar", args)  # noqa: E731
-    if m := _CORTAR_TRECHO.match(t) or _CORTAR.match(t):
-        trecho = m.group("trecho")
-        if interpretar_intervalo(trecho) is not None:
-            return editar_({"acao": "cortar", "video": _video_do_alvo(m.group("alvo")), "trecho": trecho})
+    if m := _CORTAR_TRECHO.match(t):
+        if interpretar_intervalo(m.group("trecho")) is not None:
+            return editar_({"acao": "cortar", "video": _video_do_alvo(m.group("alvo")), "trecho": m.group("trecho")})
+    if m := _CORTAR.match(t):
+        alvo, trecho = separar_trecho(m.group("resto"))
+        if trecho is not None:
+            return editar_({"acao": "cortar", "video": _video_do_alvo(alvo), "trecho": trecho})
     if m := _EXTRAIR_AUDIO.match(t):
         return editar_({"acao": "extrair_audio", "video": _video_do_alvo(m.group("alvo")),
                         "formato": m.group("formato") or "mp3"})
@@ -1642,13 +1654,14 @@ def atalho(t: str, ctx, rodar, original: str | None):
     if m := _CONVERTER.match(t):
         return editar_({"acao": "converter", "video": _video_do_alvo(m.group("alvo")), "formato": m.group("formato")})
     if m := _GIF.match(t):
-        args = {"acao": "gif", "video": _video_do_alvo(m.group("alvo"))}
-        if m.group("trecho") and interpretar_intervalo(m.group("trecho")) is not None:
-            args["trecho"] = m.group("trecho")
+        alvo, trecho = separar_trecho(m.group("resto"))
+        args = {"acao": "gif", "video": _video_do_alvo(alvo)}
+        if trecho:
+            args["trecho"] = trecho
         return editar_(args)
     if m := _VELOCIDADE.match(t):
         desacelera = m.group("verbo").startswith("desacel")
-        fator = float(m.group("fator").replace(",", ".")) if m.group("fator") else 2.0
+        fator = float(re.sub(r"[, ]", ".", m.group("fator"))) if m.group("fator") else 2.0
         if desacelera and fator > 1:
             fator = 1 / fator
         return editar_({"acao": "velocidade", "video": _video_do_alvo(m.group("alvo")), "fator": fator})
@@ -1663,10 +1676,13 @@ def atalho(t: str, ctx, rodar, original: str | None):
     if m := _LEGENDAR.match(t):
         return rodar("video_legendas", {"video": _video_do_alvo(m.group("alvo")), "queimar": True})
     if m := _VERTICAL.match(t):
-        args = {"acao": "vertical", "video": _video_do_alvo(m.group("alvo")),
-                "modo": "fundo" if m.group("fundo") else "corte"}
-        if m.group("trecho") and interpretar_intervalo(m.group("trecho")) is not None:
-            args["trecho"] = m.group("trecho")
+        alvo, trecho = separar_trecho(m.group("resto"))
+        fundo = m.group("fundo")
+        if trecho and (f := re.search(r"\s+(com (?:o )?fundo(?: desfocado)?|inteiro|sem cortar)$", trecho)):
+            trecho, fundo = trecho[:f.start()], f.group(1)
+        args = {"acao": "vertical", "video": _video_do_alvo(alvo), "modo": "fundo" if fundo else "corte"}
+        if trecho:
+            args["trecho"] = trecho
         return editar_(args)
     if m := _VERTICAL_2.match(t):
         return editar_({"acao": "vertical", "video": _video_do_alvo(m.group("alvo")), "modo": "corte"})
