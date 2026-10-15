@@ -1,0 +1,15 @@
+{
+  "name": "Sexta-Feira",
+  "short_name": "Sexta",
+  "start_url": "/m",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#06101a",
+  "theme_color": "#06101a",
+  "icons": [
+    { "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icone-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icone-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
