@@ -177,8 +177,10 @@ def test_ferramenta_inexistente_e_tipos_ignoram_o_que_falta(ag):
     cerebro = usar(ag, CerebroFalso([[("terminal", {"comando": "dir"})], "Não deu."]))
     agente = ag.agentes.iniciar("video", "cortar um vídeo", "voz")
     esperar_fim(agente)
-    # a extensão de vídeo não existe nesta base: video_* é ignorado, sobra arquivos e memória
-    assert set(cerebro.extras[0]["ferramentas"]) == {"arquivos", "memoria_buscar"}
+    # só entram as ferramentas do tipo que existem (video_* vem da extensão de vídeo, quando instalada)
+    nomes = set(cerebro.extras[0]["ferramentas"])
+    assert {"arquivos", "memoria_buscar"} <= nomes and all(n.startswith("video_") for n in nomes - {"arquivos", "memoria_buscar"})
+    assert "terminal" not in nomes
     assert any("não está disponível" in p["texto"] for p in agente.passos if p["tipo"] == "resultado")
 
 

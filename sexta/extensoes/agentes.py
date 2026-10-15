@@ -458,7 +458,11 @@ def _do_registro(app, nome: str, esquema: dict) -> FerramentaDoAgente:
     original = obter(nome) if callable(obter) else app.registro._ferramentas[nome]  # noqa: SLF001
 
     def nivel(args):
-        return original.nivel_para(_converter(args, original.parametros))
+        valor = original.nivel_para(_converter(args, original.parametros))
+        autonomia = getattr(app.registro, "_autonomia", None)
+        if valor == CONFIRMAR and callable(autonomia) and autonomia() == "total":
+            return LIVRE  # acesso completo: o próprio Registro roda sem perguntar (ROSTO continua pedindo)
+        return valor
 
     def descrever(args):
         convertidos = _converter(args, original.parametros)

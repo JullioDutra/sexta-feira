@@ -1,1 +1,0 @@
-var e=e=>e.toLocaleString(`pt-BR`);export{e as t};

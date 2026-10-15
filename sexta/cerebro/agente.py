@@ -201,6 +201,10 @@ class Agente:
         """O cliente do modelo (Claude, FreeLLMAPI ou Ollama). ``ollama`` é o nome antigo."""
         return self.ollama
 
+    @cerebro.setter
+    def cerebro(self, cliente) -> None:
+        self.ollama = cliente
+
     # ------------------------------------------------------------------
     def cancelar(self) -> None:
         self._cancelar.set()
