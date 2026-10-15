@@ -216,7 +216,7 @@ class SessaoCelular:
             self.responder(f"Estou bloqueada. {dica} e peça de novo.", transcricao=texto)
             return
         self._mudar("pensando")
-        resposta = app.agente.processar(texto, canal="celular", cliente=self.cliente, falar=False)
+        resposta = app.agente.processar(texto, canal="celular", cliente=self.cliente, falar=False) or {}
         final = resposta.get("texto") or ""
         imagem = imagem_da_resposta(app, resposta)
         self._esvaziar()  # o que chegou enquanto ela pensava não é pedido
@@ -514,7 +514,9 @@ def atalho(t: str, ctx, rodar, original: str | None):
             resposta = executar()
             ok = any(r.get("ferramenta") == "computador" and r.get("ok") for r in ctx.resultados)
             if ok and ctx.canal == "celular":
-                return "PC bloqueado. Para me usar de novo, desbloqueie com o PIN ou no computador."
+                if ctx.app.sessao.bloqueada:
+                    return "PC bloqueado. Para me usar de novo, desbloqueie com o PIN ou no computador."
+                return "PC bloqueado."
             return resposta
         return travar
     return None
