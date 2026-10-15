@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import re
 import signal
@@ -596,10 +597,21 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
             app.barramento.anexar_loop(asyncio.get_running_loop())
         await websocket.send_json(foto(cliente))
         registrado = app.barramento.novo_cliente(cliente.tipo, cliente.nome, websocket.send_json)
+        try:  # quadros binários (áudio do celular) vão direto para a extensão mãos livres
+            from .extensoes import maos_livres
+        except Exception:  # noqa: BLE001
+            maos_livres = None
         envio = asyncio.create_task(registrado.loop_envio())
         try:
             while True:
-                mensagem = await websocket.receive_json()
+                quadro = await websocket.receive()
+                if quadro["type"] == "websocket.disconnect":
+                    raise WebSocketDisconnect(quadro.get("code", 1000))
+                if quadro.get("bytes") is not None:  # áudio do celular no modo mãos livres
+                    if cliente.tipo == "celular" and maos_livres is not None:
+                        maos_livres.receber_audio(app, registrado, quadro["bytes"])
+                    continue
+                mensagem = json.loads(quadro.get("text") or "")
                 tipo = mensagem.get("tipo")
                 if tipo == "maos" and cliente.tipo == "pc":
                     registrado.quer_maos = bool(mensagem.get("ligar"))
@@ -621,6 +633,8 @@ def criar_api(app, verificador: VerificadorHosts | None = None) -> Any:
         except Exception:  # noqa: BLE001
             log.exception("Erro no WebSocket")
         finally:
+            if maos_livres is not None:
+                maos_livres.desconectar(app, registrado)
             app.barramento.remover_cliente(registrado)
             envio.cancel()
             if registrado.quer_maos and not app.barramento.alguem_quer_maos():
