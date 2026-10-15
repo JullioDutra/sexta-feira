@@ -522,6 +522,7 @@ def _do_mcp(app, ferramenta) -> FerramentaDoAgente:
 
 class GerenteAgentes:
     def __init__(self, app, arquivo: Path) -> None:
+        self.ao_terminar: list = []
         self.app = app
         self.arquivo = arquivo
         self.pasta = arquivo.parent / "agentes"
@@ -593,6 +594,11 @@ class GerenteAgentes:
         self.publicar(agora=True)
         if agente.status != "cancelado":
             self._avisar_fim(agente)
+        for funcao in list(self.ao_terminar):  # ex.: tarefas aprendidas guardam o roteiro do que deu certo
+            try:
+                funcao(agente)
+            except Exception:  # noqa: BLE001
+                log.exception("Erro num ouvinte do fim de agente")
 
     def cancelar(self, referencia: str | None = None, todos: bool = False) -> list[AgenteAutonomo]:
         alvos = self.ativos() if todos else [a for a in [self.encontrar(referencia, so_ativos=True)] if a]
