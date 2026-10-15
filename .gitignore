@@ -11,5 +11,5 @@ config/rotinas_criadas.yaml
 scripts/sexta.ico
 
 # HUD
-hud/node_modules/
+hud/node_modules
 config/layouts_criados.yaml
