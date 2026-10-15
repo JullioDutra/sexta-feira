@@ -144,12 +144,13 @@ class ConfigServidor:
     def nivel_de(self, nome: str, anotacoes: Any = None) -> int:
         if _casa(nome, self.confirmar):
             return CONFIRMAR
-        if anotacoes is not None and getattr(anotacoes, "destructive_hint", None) is True \
-                and not getattr(anotacoes, "read_only_hint", None):
+        so_leitura = _campo(anotacoes, "read_only_hint", "readOnlyHint") if anotacoes is not None else None
+        destrutiva = _campo(anotacoes, "destructive_hint", "destructiveHint") if anotacoes is not None else None
+        if destrutiva is True and not so_leitura:
             return CONFIRMAR
         if _casa(nome, self.livres):
             return LIVRE
-        if anotacoes is not None and getattr(anotacoes, "read_only_hint", None) is True:
+        if so_leitura is True:
             return LIVRE
         return CONFIRMAR if self.nivel.startswith("confirm") else LIVRE
 
@@ -189,13 +190,22 @@ def _texto_do_resultado(resultado: Any) -> tuple[bool, str]:
             partes.append(getattr(recurso, "text", None) or f"[recurso {getattr(recurso, 'uri', '')}]")
         else:
             partes.append(f"[{tipo or 'conteúdo'}]")
-    estruturado = getattr(resultado, "structured_content", None)
+    estruturado = _campo(resultado, "structured_content", "structuredContent")
     if not any(p.strip() for p in partes) and estruturado is not None:
         partes.append(json.dumps(estruturado, ensure_ascii=False, default=str))
     texto = "\n".join(p for p in partes if p).strip()
     if len(texto) > MAX_RESULTADO:
         texto = texto[:MAX_RESULTADO] + f"\n[… cortado: {len(texto) - MAX_RESULTADO} caracteres a mais]"
-    return not bool(getattr(resultado, "is_error", False)), texto or "(sem conteúdo)"
+    return not bool(_campo(resultado, "is_error", "isError")), texto or "(sem conteúdo)"
+
+
+def _campo(objeto: Any, *nomes: str) -> Any:
+    """O pacote mcp 1.x usa camelCase (isError) e o 2.x snake_case (is_error)."""
+    for nome in nomes:
+        valor = getattr(objeto, nome, None)
+        if valor is not None:
+            return valor
+    return None
 
 
 class ServidorMCP:

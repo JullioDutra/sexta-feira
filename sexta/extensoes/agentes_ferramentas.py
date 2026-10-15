@@ -230,7 +230,7 @@ def _endereco_publico(url: str) -> bool:
 def html_para_texto(conteudo: str) -> tuple[str, str]:
     """(título, texto legível) de uma página HTML."""
     titulo = re.search(r"<title[^>]*>(.*?)</title>", conteudo, re.IGNORECASE | re.DOTALL)
-    corpo = re.sub(r"(?is)<(script|style|noscript|svg|template|iframe)[^>]*>.*?</\1>", " ", conteudo)
+    corpo = re.sub(r"(?is)<(script|style|noscript|svg|template|iframe|head|title)\b[^>]*>.*?</\1>", " ", conteudo)
     corpo = re.sub(r"(?is)<!--.*?-->", " ", corpo)
     corpo = re.sub(r"(?i)<(br|/p|/div|/li|/h[1-6]|/tr|/section|/article)[^>]*>", "\n", corpo)
     corpo = re.sub(r"<[^>]+>", " ", corpo)
