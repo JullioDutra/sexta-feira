@@ -570,3 +570,9 @@ Ela aprende tarefas de três jeitos e depois executa sozinha — por voz, por pr
 - O celular avisa quando um agente pede aprovação ("Sexta-Feira, aprova o agente") e quando há alerta de segurança.
 - Pelo celular: "tira um print do PC e me manda" (a imagem chega na conversa), "o que está rodando aí", "trava o PC".
 - Requer o endereço **https** do QR code e a palavra de ativação ligada (Vosk: `pip install vosk` e `python -m sexta baixar`).
+
+## Defesa: vigilância, links e segredos nos projetos
+
+- **Vigilância contínua** (ligada por padrão; "liga/desliga a vigilância"): a cada 15 minutos ela compara o PC com a linha de base — programas novos na inicialização, tarefas agendadas novas, portas abertas novas e proteção (Defender/firewall) desligada. A primeira passada só aprende como o seu PC é. Mudança de risco médio ou alto vira alerta no HUD, no celular e na memória (e por voz, se for alto). "O que mudou no PC?" mostra o alerta; "pode ignorar" / "fui eu" marca como conhecido.
+- **Links:** "esse link é seguro? …" ou "verifica o link que eu copiei". Análise só local do endereço — imitação de banco/loja/gov, letras disfarçadas (punycode), IP no lugar do nome, @ no endereço, encurtadores, terminações muito usadas em golpe, falta de HTTPS. O link nunca é aberto.
+- **Segredos nos seus projetos:** "procura senhas esquecidas no projeto bolaocopa" varre os arquivos de texto da pasta do projeto (as pastas de projeto de Ajustes → Agentes) atrás de chaves da AWS, Google, GitHub, Stripe, Slack, OpenAI, Anthropic, chaves privadas, JWT e senhas escritas no código; mostra arquivo:linha com o segredo mascarado e avisa se o `.env` não está no `.gitignore`.
