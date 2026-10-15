@@ -25,6 +25,16 @@ PADRAO = ["ipconfig", "ipconfig /all", "ping *", "tracert *", "nslookup *", "hos
           "tasklist", "winget list", "winget upgrade", "winget search *", "git status", "git log --oneline -10",
           "python --version", "node --version", "npm --version", "nvidia-smi", "wsl --list --verbose", "dir *"]
 LIMITE_SAIDA = 3000
+# irreversíveis: mesmo com autonomia total pedem confirmação com rosto
+DESTRUTIVOS = re.compile(
+    r"\b(del|erase|rd|rmdir|format|diskpart|cipher|bcdedit|shutdown|takeown|icacls|vssadmin|wbadmin|"
+    r"remove-item|clear-disk|format-volume|stop-computer|restart-computer|set-executionpolicy)\b|"
+    r"\breg(\.exe)?\s+(delete|add|import)|\bsc(\.exe)?\s+(delete|config)|\bnet\s+(user|localgroup)|"
+    r"\bwmic\b.*\bdelete\b|\bschtasks\b.*/(create|delete)|-recurse|\brm\s|\bmv\s", re.I)
+
+
+def destrutivo(comando: str) -> bool:
+    return bool(DESTRUTIVOS.search(comando or "")) or bool(PERIGOSOS.search(comando or ""))
 
 
 class Terminal:

@@ -33,6 +33,10 @@ NOMES_IDIOMA_WINDOWS = {"pt": "portugu|maria", "en": "english", "es": "spanish",
 log = logging.getLogger(__name__)
 
 
+RECONHECIMENTOS = ["Deixa eu ver.", "Um instante.", "Só um momento.", "Vou pensar nisso.", "Deixa comigo.",
+                   "Analisando."]
+
+
 class Fala:
     def __init__(self, app) -> None:
         self.app = app
@@ -48,6 +52,9 @@ class Fala:
         self._ocioso = threading.Event()
         self._ocioso.set()
         self._cache: OrderedDict[tuple, tuple[np.ndarray, int]] = OrderedDict()
+        self._fixas: dict[tuple, tuple[np.ndarray, int]] = {}  # frases curtas pré-geradas (não saem do cache)
+        self._ultimo_reconhecimento = ""
+        self._preaquecendo = False
         self._edge_falhas = 0
         self._edge_pausado_ate = 0.0
         self._loop = asyncio.new_event_loop()
@@ -102,6 +109,31 @@ class Fala:
         if terminou and self.app.estado.atual == "falando":
             agente = getattr(self.app, "agente", None)
             self.app.estado.definir("pensando" if agente and agente.ocupado() else "inativa")
+
+    def preaquecer(self, frases: list[str]) -> None:
+        """Gera o áudio de frases curtas de antemão: depois elas tocam em milissegundos."""
+        for frase in frases:  # quem sintetiza é a thread da síntese (o loop asyncio é dela)
+            texto = limpar_para_fala(frase)
+            if texto and (*self._perfil(None), self._com_efeito(), texto) not in self._fixas:
+                self._textos.put((None, ("__fixa__", texto)))
+
+    def reconhecer(self) -> None:
+        """Um "deixa eu ver" na hora, enquanto o cérebro pensa (só frases já pré-geradas)."""
+        alvos = {limpar_para_fala(f) for f in RECONHECIMENTOS}
+        prontas = [c[-1] for c in self._fixas if c[:4] == (*self._perfil(None), self._com_efeito()) and c[-1] in alvos]
+        opcoes = [f for f in prontas if f != self._ultimo_reconhecimento] or prontas
+        if not prontas and not self._preaquecendo:
+            # voz trocada (ou ainda não pré-gerou): prepara para as próximas vezes, depois desta resposta
+            self._preaquecendo = True
+            temporizador = threading.Timer(20, lambda: (self.preaquecer(RECONHECIMENTOS),
+                                                        setattr(self, "_preaquecendo", False)))
+            temporizador.daemon = True
+            temporizador.start()
+        if opcoes:
+            import random
+
+            self._ultimo_reconhecimento = random.choice(opcoes)
+            self.falar(self._ultimo_reconhecimento)
 
     def falar_e_esperar(self, texto: str, timeout: float = 60.0) -> None:
         self.falar(texto)
@@ -192,6 +224,8 @@ class Fala:
         efeito = self._com_efeito()
         perfil = self._perfil(voz)
         chave = (*perfil, efeito, texto)
+        if chave in self._fixas:
+            return self._fixas[chave]
         if chave in self._cache:
             self._cache.move_to_end(chave)
             return self._cache[chave]
@@ -256,6 +290,13 @@ class Fala:
             try:
                 geracao, item = self._textos.get(timeout=0.5)
             except queue.Empty:
+                continue
+            if geracao is None and item[0] == "__fixa__":
+                try:
+                    chave = (*self._perfil(None), self._com_efeito(), item[1])
+                    self._fixas[chave] = self._sintetizar(item[1])
+                except Exception as erro:  # noqa: BLE001
+                    log.info("Não consegui pré-gerar '%s': %s", item[1], erro)
                 continue
             if geracao != self._geracao:
                 self._concluir()

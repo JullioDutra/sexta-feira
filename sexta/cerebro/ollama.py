@@ -121,11 +121,14 @@ class ClienteOllama:
 
     # ------------------------------------------------------------------
     def conversar(self, mensagens: list[dict[str, Any]], ferramentas: list[dict] | None = None,
-                  cancelado=lambda: False, *, modelo: str | None = None, max_tokens: int | None = None
-                  ) -> Iterator[dict[str, Any]]:
-        """Gera eventos: ``{"tipo": "texto"|"pensamento"|"ferramentas"|"fim", ...}``."""
+                  cancelado=lambda: False, *, modelo: str | None = None, max_tokens: int | None = None,
+                  pensar: bool | None = None) -> Iterator[dict[str, Any]]:
+        """Gera eventos: ``{"tipo": "texto"|"pensamento"|"ferramentas"|"fim", ...}``.
+
+        ``pensar``: liga o raciocínio só neste pedido (pedidos complexos); ``None`` usa o padrão."""
+        pensar = self.pensar if pensar is None else (pensar or self.pensar)
         opcoes: dict[str, Any] = {"temperature": self.temperatura, "num_ctx": self.contexto}
-        if max_tokens and not self.pensar:  # pensando, o raciocínio também conta no limite
+        if max_tokens and not pensar:  # pensando, o raciocínio também conta no limite
             opcoes["num_predict"] = max_tokens
         payload: dict[str, Any] = {
             "model": modelo or self.modelo,
@@ -137,7 +140,7 @@ class ClienteOllama:
         if ferramentas:
             payload["tools"] = ferramentas
         if self._enviar_think:
-            payload["think"] = self.pensar
+            payload["think"] = pensar
 
         for tentativa in range(2):
             try:
