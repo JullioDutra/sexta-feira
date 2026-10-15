@@ -619,3 +619,17 @@ def test_claude_code_headless(ag, tmp_path, monkeypatch):
 def test_claude_code_ausente(ag, tmp_path, monkeypatch):
     monkeypatch.setattr(proprias.shutil, "which", lambda nome: None)
     assert proprias.rodar_claude_code(Trabalho(ag, tmp_path), "x", tmp_path)["resumo"] == proprias.SEM_CLAUDE
+
+
+def test_niveis_do_rea_pelo_yaml_padrao(tmp_path):
+    import yaml
+
+    dados = yaml.safe_load(mcp_cliente.MODELO_YAML)["servidores"]
+    rea = mcp_cliente.ConfigServidor.de_dict("rea", dados["rea"])
+    leitura = SimpleNamespace(read_only_hint=False, destructive_hint=False, open_world_hint=False)
+    assert rea.nivel_de("binary_session", leitura) == LIVRE                       # só mexe na sessão do REA
+    assert rea.nivel_de("analyze_web_bundle", SimpleNamespace(open_world_hint=True)) == CONFIRMAR  # processo/rede
+    assert rea.nivel_de("run_target", SimpleNamespace(destructive_hint=True)) == CONFIRMAR
+    assert rea.nivel_de("capture_process_scenario", SimpleNamespace(read_only_hint=True)) == CONFIRMAR
+    chrome = mcp_cliente.ConfigServidor.de_dict("chrome-devtools", dados["chrome-devtools"])
+    assert chrome.nivel_de("navigate_page") == LIVRE and chrome.nivel_de("evaluate_script") == CONFIRMAR

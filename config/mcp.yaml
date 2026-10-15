@@ -9,6 +9,8 @@
 #   nivel:       livre ou confirmar — segurança padrão das ferramentas deste servidor
 #   livres:      ferramentas que rodam sem perguntar mesmo com nivel: confirmar (aceita * no nome)
 #   confirmar:   ferramentas que sempre pedem a sua aprovação (aceita * no nome)
+#   confirmar_externo: true faz pedir aprovação para ferramentas que o servidor marca como "mundo aberto"
+#                (iniciam processos ou acessam a rede)
 #   timeout:     segundos por chamada (padrão 120)
 #   env:         variáveis de ambiente extras
 #
@@ -18,11 +20,15 @@
 servidores:
   # REA — engenharia reversa (binários, Electron/JS, .NET, APK, sites). https://github.com/morluto/rea
   # Requer Node.js 20+. A primeira execução baixa o pacote. Ghidra/JDK são opcionais (veja o README do REA).
+  # O REA marca cada ferramenta: as de só leitura rodam direto; as que executam o alvo, iniciam processos,
+  # acessam a rede ou mexem em aparelhos sempre pedem a sua aprovação.
   rea:
     comando: npx
     args: ["-y", "rea-agents@latest", "mcp"]
     habilitado: auto
-    nivel: confirmar
+    nivel: livre
+    confirmar_externo: true
+    confirmar: ["capture_*", "*frida*", "*gdb*", "*debug*", "*adb*", "*install*", "run_*", "*launch*", "*spawn*"]
     timeout: 600
 
   # Chrome DevTools MCP — controla um Chrome de verdade (navegar, clicar, ler a página, rede, desempenho).

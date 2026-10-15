@@ -43,6 +43,8 @@ MODELO_YAML = """\
 #   nivel:       livre ou confirmar — segurança padrão das ferramentas deste servidor
 #   livres:      ferramentas que rodam sem perguntar mesmo com nivel: confirmar (aceita * no nome)
 #   confirmar:   ferramentas que sempre pedem a sua aprovação (aceita * no nome)
+#   confirmar_externo: true faz pedir aprovação para ferramentas que o servidor marca como "mundo aberto"
+#                (iniciam processos ou acessam a rede)
 #   timeout:     segundos por chamada (padrão 120)
 #   env:         variáveis de ambiente extras
 #
@@ -52,11 +54,15 @@ MODELO_YAML = """\
 servidores:
   # REA — engenharia reversa (binários, Electron/JS, .NET, APK, sites). https://github.com/morluto/rea
   # Requer Node.js 20+. A primeira execução baixa o pacote. Ghidra/JDK são opcionais (veja o README do REA).
+  # O REA marca cada ferramenta: as de só leitura rodam direto; as que executam o alvo, iniciam processos,
+  # acessam a rede ou mexem em aparelhos sempre pedem a sua aprovação.
   rea:
     comando: npx
     args: ["-y", "rea-agents@latest", "mcp"]
     habilitado: auto
-    nivel: confirmar
+    nivel: livre
+    confirmar_externo: true
+    confirmar: ["capture_*", "*frida*", "*gdb*", "*debug*", "*adb*", "*install*", "run_*", "*launch*", "*spawn*"]
     timeout: 600
 
   # Chrome DevTools MCP — controla um Chrome de verdade (navegar, clicar, ler a página, rede, desempenho).
@@ -107,6 +113,7 @@ class ConfigServidor:
     livres: list[str] = field(default_factory=list)
     confirmar: list[str] = field(default_factory=list)
     timeout: float = CHAMADA_S
+    confirmar_externo: bool = False
     env: dict[str, str] = field(default_factory=dict)
     cwd: str | None = None
 
@@ -122,7 +129,8 @@ class ConfigServidor:
         return cls(nome=str(nome), comando=str(dados["comando"]), args=_lista(dados.get("args")),
                    habilitado=dados.get("habilitado", "auto"), nivel=str(dados.get("nivel") or "confirmar").lower(),
                    livres=_lista(dados.get("livres")), confirmar=_lista(dados.get("confirmar")),
-                   timeout=max(5.0, timeout), env={str(k): str(v) for k, v in env.items()},
+                   timeout=max(5.0, timeout), confirmar_externo=bool(dados.get("confirmar_externo")),
+                   env={str(k): str(v) for k, v in env.items()},
                    cwd=str(dados["cwd"]) if dados.get("cwd") else None)
 
     def comando_existe(self) -> bool:
@@ -146,7 +154,10 @@ class ConfigServidor:
             return CONFIRMAR
         so_leitura = _campo(anotacoes, "read_only_hint", "readOnlyHint") if anotacoes is not None else None
         destrutiva = _campo(anotacoes, "destructive_hint", "destructiveHint") if anotacoes is not None else None
+        externa = _campo(anotacoes, "open_world_hint", "openWorldHint") if anotacoes is not None else None
         if destrutiva is True and not so_leitura:
+            return CONFIRMAR
+        if self.confirmar_externo and externa is True:
             return CONFIRMAR
         if _casa(nome, self.livres):
             return LIVRE
