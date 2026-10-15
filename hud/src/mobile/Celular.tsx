@@ -7,6 +7,7 @@ import type { Holograma } from "../lib/tipos";
 import Clima from "../holograms/Clima";
 import { GlifoTipo, Icone } from "../holograms/Glifos";
 import { CELULAR_EXTRA, hologramaExtra } from "../extensoes";
+import { ImagemDaConversa, PainelMaosLivres } from "../extensoes/maosLivres";
 import { Atividades, Lembretes, Protocolo, Rotinas } from "../holograms/Listas";
 import Jornal from "../holograms/Jornal";
 import { Foco, Plano, Tarefas } from "../holograms/Planejamento";
@@ -292,8 +293,10 @@ export default function Celular() {
       rotulo: r.nome.charAt(0).toUpperCase() + r.nome.slice(1),
       fazer: () => api(`/api/rotinas/${encodeURIComponent(r.nome)}/executar`, { method: "POST" }).catch((e) => avisar(e.message, "erro")),
     })),
-    { rotulo: "Print do PC", fazer: () => enviar("Tira um print da tela") },
-    { rotulo: "Bloquear o PC", fazer: () => enviar("Bloqueia o computador") },
+    { rotulo: "Print do PC", fazer: () => enviar("Tira um print do PC e me manda") },
+    { rotulo: "O que está rodando?", fazer: () => enviar("O que está rodando aí?") },
+    { rotulo: "Agentes", fazer: () => enviar("Status dos agentes") },
+    { rotulo: "Travar o PC", fazer: () => enviar("Trava o PC") },
     {
       rotulo: microfonePc ? "Silenciar microfone do PC" : "Ligar microfone do PC",
       fazer: () => api("/api/microfone", { method: "POST", json: { ligado: !microfonePc } }).catch(() => {}),
@@ -339,6 +342,8 @@ export default function Celular() {
         </form>
       )}
 
+      <PainelMaosLivres destacar={new URLSearchParams(location.search).has("maos_livres")} />
+
       <nav className="mt-3 flex gap-5 px-5 text-sm" aria-label="Seções">
         {(["conversa", "paineis"] as const).map((a) => (
           <button
@@ -366,6 +371,7 @@ export default function Celular() {
                   >
                     {l.texto}
                   </p>
+                  {l.papel === "assistente" && <ImagemDaConversa id={l.id} />}
                 </li>
               ))}
             </ol>

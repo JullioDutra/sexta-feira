@@ -5,8 +5,12 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
+  "description": "Sexta-Feira no celular: converse, fale mãos livres e controle o PC.",
   "background_color": "#06101a",
   "theme_color": "#06101a",
+  "shortcuts": [
+    { "name": "Mãos livres", "short_name": "Mãos livres", "url": "/m?maos_livres=1", "icons": [{ "src": "/icone-180.png", "sizes": "180x180" }] }
+  ],
   "icons": [
     { "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml" },
     { "src": "/icone-180.png", "sizes": "180x180", "type": "image/png" },
