@@ -189,10 +189,10 @@ def interpretar_intervalo(texto: str) -> Intervalo | None:
     t = re.sub(r"\s+(?:do video|do arquivo)$", "", t)
     if not t:
         return None
-    if m := re.fullmatch(r"(?:os |o |nos )?primeiros? (.+)", t):
+    if m := re.fullmatch(r"(?:os |o |nos |dos |do )?primeiros? (.+)", t):
         fim = interpretar_tempo(m.group(1))
         return Intervalo(0.0, fim) if fim else None
-    if m := re.fullmatch(r"(?:os |o |nos )?ultimos? (.+)", t):
+    if m := re.fullmatch(r"(?:os |o |nos |dos |do )?ultimos? (.+)", t):
         n = interpretar_tempo(m.group(1))
         return Intervalo(do_fim=n) if n else None
     if m := re.fullmatch(r"(?:a partir|depois|comecando|desde)\s+(?:do|de|da|o)?\s*(.+?)(?:\s+(?:em diante|ate o fim|ate o final))?", t):
@@ -757,13 +757,18 @@ def resolver_video(app, alvo: str | None) -> Path:
         raise ErroVideo(f"O arquivo {caminho} não existe.")
     from ..habilidades.arquivos import interpretar_consulta
 
+    videos = _varrer_videos(pasta_videos(app))
+    exato = re.sub(r"^(?:(?:o|a|do|da) )?(?:video |arquivo )?", "", t)
+    iguais = [(mtime, p) for mtime, p in videos if normalizar(p.stem) == exato or normalizar(p.name) == exato]
+    if iguais:
+        return max(iguais)[1]
     termos = [p for p in interpretar_consulta(texto).termos if p not in ("gravacao", "clipe")]
     if termos:
         from rapidfuzz import fuzz
 
         alvo_n = " ".join(termos)
         melhores = []
-        for mtime, p in _varrer_videos(pasta_videos(app)):
+        for mtime, p in videos:
             nome = normalizar(p.stem)
             nota = max(fuzz.token_set_ratio(alvo_n, nome), fuzz.partial_ratio(alvo_n, nome) - 5)
             if all(x in nome for x in termos):
@@ -927,8 +932,9 @@ class GerenteVideos:
         trabalho = Trabalho(next(self._ids), tipo, rotulo, executar, canal)
         with self._lock:
             self._trabalhos.append(trabalho)
-            self._trabalhos = [t for t in self._trabalhos if t.estado in ("fila", "rodando")] + \
-                [t for t in self._trabalhos if t.estado not in ("fila", "rodando")][-10:]
+            terminados = [t for t in self._trabalhos if t.estado not in ("fila", "rodando")]
+            antigos = {t.id for t in terminados[:-10]}
+            self._trabalhos = [t for t in self._trabalhos if t.id not in antigos]  # ordem de chegada
             self._tem_trabalho.notify_all()
         self._publicar(forcar=True)
         return trabalho
@@ -1649,7 +1655,7 @@ def atalho(t: str, ctx, rodar, original: str | None):
         return editar_({"acao": "sem_audio", "video": _video_do_alvo(m.group("alvo"))})
     if m := _COMPRIMIR.match(t):
         destino = (m.group("destino") or "whatsapp").replace("zap", "whatsapp")
-        destino = re.sub(r"\s*(?:mega|megas)$", "mb", destino)
+        destino = re.sub(r"\s*(?:mb|mega|megas)$", "mb", destino)
         return editar_({"acao": "comprimir", "video": _video_do_alvo(m.group("alvo")), "destino": destino})
     if m := _CONVERTER.match(t):
         return editar_({"acao": "converter", "video": _video_do_alvo(m.group("alvo")), "formato": m.group("formato")})
@@ -1686,7 +1692,9 @@ def atalho(t: str, ctx, rodar, original: str | None):
         return editar_(args)
     if m := _VERTICAL_2.match(t):
         return editar_({"acao": "vertical", "video": _video_do_alvo(m.group("alvo")), "modo": "corte"})
-    if m := _JUNTAR.match(t):
+    com_virgulas = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9:,\s]", " ", sem_acentos(
+        remover_ativacao(original).lower().replace("-", " ")))).strip() if original else t
+    if m := _JUNTAR.match(com_virgulas) or _JUNTAR.match(t):
         lista = _separar_lista(m.group("lista"))
         if len(lista) >= 2:
             return editar_({"acao": "juntar", "videos": lista})
