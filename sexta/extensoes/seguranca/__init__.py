@@ -336,7 +336,7 @@ def _abrir(destino: str) -> None:
 # -- atalhos (sem IA) ---------------------------------------------------------------------------------
 _VERBO_ANALISAR = r"(?:analisa|analise|analisar|verifica|verifique|verificar|checa|cheque|checar|examina|examine|escaneia|escaneie)"
 _ANALISAR = re.compile(rf"^{_VERBO_ANALISAR}(?: pra mim| para mim)? (?:o |a |esse |essa |este |esta |aquele )?"
-                       r"(?:arquivo|programa|instalador|executavel|script) (.+)$")
+                       r"(arquivo|programa|instalador|executavel|script) (.+)$")
 _ANALISAR_ORIGINAL = re.compile(r"(?:arquivo|programa|instalador|execut[aá]vel|script)\s+(.+?)[\s?!.]*$", re.I)
 _ULTIMO = re.compile(rf"^(?:{_VERBO_ANALISAR}(?: o| a)? (?:ultimo download|ultimo arquivo baixado|ultimo arquivo que (?:eu )?baixei)|"
                      r"(?:o )?ultimo (?:download|arquivo baixado|arquivo que (?:eu )?baixei) (?:e|eh) (?:seguro|confiavel|perigoso|virus))$")
@@ -379,9 +379,12 @@ def atalho(t: str, ctx, rodar, original: str | None) -> Callable[[], str] | None
     if _ESSE_PROGRAMA.match(t):
         return rodar("seguranca_analisar_arquivo", {"programa": "janela_ativa"})
     if m := _ANALISAR.match(t):
-        if m.group(1) in ("aberto", "da tela", "na tela"):
+        if m.group(2) in ("aberto", "da tela", "na tela"):
             return rodar("seguranca_analisar_arquivo", {"programa": "janela_ativa"})
-        return rodar("seguranca_analisar_arquivo", {"caminho": _argumento(original, _ANALISAR_ORIGINAL, m.group(1))})
+        alvo = _argumento(original, _ANALISAR_ORIGINAL, m.group(2))
+        if m.group(1) == "programa" and not re.search(r"[\\/.]", alvo):  # "analisa o programa discord": o aberto
+            return rodar("seguranca_analisar_arquivo", {"programa": alvo})
+        return rodar("seguranca_analisar_arquivo", {"caminho": alvo})
     if m := _ARQUIVO_SEGURO.match(t):
         return rodar("seguranca_analisar_arquivo", {"caminho": _argumento(original, _ARQUIVO_SEGURO_ORIGINAL, m.group(1))})
     if _REVISAR.match(t):

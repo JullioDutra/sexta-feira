@@ -786,6 +786,7 @@ def registrar_execucoes(app, monkeypatch) -> list[tuple[str, dict]]:
     ("Sexta-feira, analisa o arquivo Setup_v2.exe", "seguranca_analisar_arquivo", {"caminho": "Setup_v2.exe"}),
     ("analisa esse arquivo C:\\Users\\eu\\Downloads\\app.msi", "seguranca_analisar_arquivo",
      {"caminho": "C:\\Users\\eu\\Downloads\\app.msi"}),
+    ("analisa o programa Discord", "seguranca_analisar_arquivo", {"programa": "Discord"}),
     ("verifica o instalador zoom.exe", "seguranca_analisar_arquivo", {"caminho": "zoom.exe"}),
     ("o arquivo boleto.pdf é seguro?", "seguranca_analisar_arquivo", {"caminho": "boleto.pdf"}),
     ("o último download é seguro?", "seguranca_analisar_arquivo", {"caminho": "último download"}),
