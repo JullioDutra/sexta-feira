@@ -103,7 +103,7 @@ def avaliar_comando(comando: str) -> tuple[int, list[str]]:
     pontos, motivos = 0, []
     exe = executavel_do_comando(comando)
     if pasta := pasta_suspeita(exe):
-        pontos += 3
+        pontos += 3 if pasta in ("pasta Downloads", "raiz da pasta AppData\\Roaming") else 5
         motivos.append(f"roda de {pasta}")
     if INTERPRETADORES.search(comando):
         pontos += 2

@@ -54,11 +54,11 @@ PADROES: list[tuple[str, re.Pattern, int, str, str]] = [
                             r"Set-NetFirewallProfile[^\n]*-Enabled\s+\$?False", _I),
      4, "tenta desativar o antivírus (Defender) ou o firewall, ou criar exceções neles", "desativar_defesas"),
     ("amsi", re.compile(r"AmsiUtils|amsiInitFailed|AmsiScanBuffer|amsiContext", _I),
-     4, "mexe na proteção de scripts do Windows (AMSI), algo que quase só malware faz", "desativar_defesas"),
+     5, "mexe na proteção de scripts do Windows (AMSI), algo que quase só malware faz", "desativar_defesas"),
     ("copias_sombra", re.compile(r"vssadmin(?:\.exe)?\s+delete\s+shadows|wmic(?:\.exe)?\s+shadowcopy\s+delete|"
                                  r"bcdedit[^\n]*recoveryenabled\s+no|wbadmin(?:\.exe)?\s+delete\s+catalog|"
                                  r"Win32_ShadowCopy[^\n]*Delete", _I),
-     4, "apaga as cópias de segurança do Windows (comportamento típico de ransomware)", "ransomware"),
+     5, "apaga as cópias de segurança do Windows (comportamento típico de ransomware)", "ransomware"),
     ("persistencia", re.compile(r"CurrentVersion\\+Run(?:Once)?\b|schtasks(?:\.exe)?\s+/create|Register-ScheduledTask|"
                                 r"New-ScheduledTask|Start Menu\\+Programs\\+Startup|shell:startup|New-Service\b|"
                                 r"\bsc(?:\.exe)?\s+create\b", _I),
@@ -183,6 +183,10 @@ def analisar_texto(texto: str, *, script: bool = True, profundidade: int = 0) ->
                 sinais.append(f"{n}× {nome}")
         if sinais:
             motivos.append(Motivo("ofuscacao", "o texto está embaralhado para esconder o que faz", 2, sinais, "ofuscacao"))
+    encontrados = {m.id for m in motivos}
+    if script and "download_execucao" in encontrados and encontrados & {"oculto", "ofuscacao", "powershell_base64",
+                                                                        "bloco_codificado"}:
+        motivos.append(Motivo("download_escondido", "e faz isso de forma escondida", 1, [], "download_execucao"))
     return _juntar(motivos)
 
 

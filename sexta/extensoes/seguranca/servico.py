@@ -150,7 +150,7 @@ class Seguranca:
         assinado = assinatura.get("texto") or "?"
         if assinatura.get("assinante"):
             assinado += f" (assinante: {assinatura['assinante']})"
-        motivos = "; ".join(m["texto"] for m in r["motivos"] if m["peso"] > 0][:3]) or "nada suspeito"
+        motivos = "; ".join([m["texto"] for m in r["motivos"] if m["peso"] > 0][:3]) or "nada suspeito"
         texto = (f"Análise de segurança do arquivo {r['arquivo']} em {quando}: {r['descricao']}. Assinatura digital: "
                  f"{assinado}. Risco {NOMES_RISCO[r['risco']]}. "
                  f"Motivos: {motivos}. SHA-256 {r['sha256']}. Caminho: {r['caminho']}.")
