@@ -209,3 +209,8 @@ SOM_ERRO = [(523.3, 0.09), (392, 0.14)]
 SOM_DESBLOQUEIO = [(659.3, 0.07), (987.8, 0.07), (1318.5, 0.12)]
 SOM_ALARME = [(1046.5, 0.18), (0, 0.08), (1046.5, 0.18), (0, 0.08), (1318.5, 0.3), (0, 0.5)]
 SOM_LEMBRETE = [(784, 0.1), (1046.5, 0.1), (1318.5, 0.16)]
+# sequência de inicialização (extensão traje): subida de energia em arpejo, terminando num acorde aberto
+SOM_INICIALIZACAO = [(196, 0.07), (261.6, 0.07), (329.6, 0.07), (392, 0.07), (523.3, 0.08), (659.3, 0.08),
+                     (784, 0.1), (1046.5, 0.26)]
+# alerta proativo do traje (temperatura, chuva, disco): dois toques descendentes, discretos
+SOM_ALERTA_TRAJE = [(1174.7, 0.08), (0, 0.05), (880, 0.12)]
