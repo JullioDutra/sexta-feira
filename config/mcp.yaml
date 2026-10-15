@@ -39,3 +39,6 @@ servidores:
     habilitado: auto
     nivel: livre
     confirmar: ["evaluate_script", "upload_file"]
+
+# A auditoria de cibersegurança usa o REA (acima) pelo agente "ciberseguranca", junto das
+# análises locais de segurança. Nenhum servidor MCP novo é necessário.

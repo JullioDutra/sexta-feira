@@ -2,6 +2,7 @@
 import { aoEvento } from "../lib/store";
 import agentes from "./agentes";
 import aprendizado from "./aprendizado";
+import ciberseguranca from "./ciberseguranca";
 import comunicacao from "./comunicacao";
 import documentos from "./documentos";
 import maosLivres from "./maosLivres";
@@ -13,7 +14,7 @@ import traje from "./traje";
 import video from "./video";
 import type { Extensao, HologramaExtra } from "./tipos";
 
-export const EXTENSOES: Extensao[] = [traje, oficina, sentinela, comunicacao, maosLivres, documentos, aprendizado, video, agentes, seguranca, tarefasAprendidas];
+export const EXTENSOES: Extensao[] = [traje, oficina, sentinela, comunicacao, maosLivres, documentos, aprendizado, video, agentes, seguranca, ciberseguranca, tarefasAprendidas];
 
 for (const ext of EXTENSOES) {
   for (const [tipo, funcao] of Object.entries(ext.eventos ?? {})) aoEvento(tipo, funcao);
