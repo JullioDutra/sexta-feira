@@ -72,7 +72,40 @@ Na primeira vez, o Windows pergunta se o Python pode usar a rede: **permita em "
 
 **Se continuar no Ollama e estiver lento:** o log e o HUD agora avisam quando o modelo não coube na placa de vídeo e está rodando na memória RAM/CPU (a causa mais comum de lentidão extrema e de erros de memória). Nesse caso use um modelo menor (`qwen3.5:4b`), reduza `OLLAMA_CONTEXTO` ou passe para o Claude.
 
-**Memória:** a conversa sobrevive a reinícios por até 6 horas (`dados/historico.json`), e ela guarda sozinha fatos pessoais duradouros ("meu time é o Cruzeiro") em `dados/memoria.json`, que entram em todas as conversas.
+**Cérebro grátis (FreeLLMAPI):** o [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) junta os planos gratuitos de dezenas de provedores atrás de um endereço só, no formato da API do Claude. Rode-o no PC (veja o README dele; o painel fica em http://localhost:3001), cadastre as chaves dos provedores e copie a chave unificada para `LIVRE_CHAVE`. Depois:
+- `CEREBRO=livre` usa só ele (grátis; qualidade e velocidade variam conforme o provedor do momento);
+- ou, melhor, mantenha o Claude e ponha `CEREBRO_RESERVA=livre`: quando o Claude falhar (sem crédito, limite, rede), o FreeLLMAPI assume por alguns minutos e ela não fica muda. `CEREBRO_RESERVA=ollama` também funciona, para respostas sem ferramentas.
+
+## Velocidade: resposta na hora, pensamento só quando precisa
+
+- **Atalhos (milissegundos):** "abre o Spotify", "volume 30", "notícias de IA de hoje", "deu certo?" — sem IA.
+- **Pedidos simples:** vão para o cérebro rápido (Haiku), sem pensamento: a primeira palavra sai em poucas centenas de milissegundos.
+- **Pedidos complexos** (analisar, planejar, explicar, código, segurança, texto copiado...): vão para o Opus **pensando** antes de responder — e ela fala na hora um "Deixa eu ver" / "Um instante" (áudio pré-gerado na partida, toca em milissegundos), para o silêncio não parecer travamento. Dá para desligar o pensamento em Ajustes → **Inteligência e memória**.
+
+## Memória e aprendizado
+
+Tudo fica em `dados/memoria.db` (SQLite, no seu PC; a memória antiga `memoria.json` é trazida sozinha):
+
+- **Fatos sobre você** (time, nomes, projetos, rotina): ela guarda sozinha quando você conta algo duradouro, ou quando você pede ("lembra que...").
+- **Lições:** como agir para acertar. Nascem das suas correções ("não era isso", "você errou", "não abriu" — ela anota o erro e escreve a lição em segundo plano), de regras que você ensina ("aprende que quando eu falar modo cinema é para apagar as luzes") e da revisão diária.
+- **Conhecimento:** o que ela aprende em análises, pesquisas e engenharia reversa.
+- **Episódios:** cada pedido fica registrado com o que foi feito e se deu certo.
+- **Como ela usa:** a cada pedido, uma busca (FTS5, milissegundos) junta os fatos, lições e conhecimentos relevantes à mensagem — o prompt de sistema não muda, então o cache do cérebro continua valendo.
+- **Revisão diária (3h):** o cérebro revisa os pedidos do dia, extrai fatos e lições novas e enfraquece o que nunca é usado. "Revisa sua memória" faz na hora.
+- **Por voz:** "o que você aprendeu hoje?", "o que você sabe sobre mim?" (abre o holograma **Memória**, onde dá para esquecer itens), "esquece que...".
+- A conversa em si sobrevive a reinícios por até 6 horas (`dados/historico.json`).
+
+## Ela sabe se deu certo
+
+- Abrir e fechar programas e mudar o volume são **conferidos** alguns segundos depois, em segundo plano (o programa abriu? fechou? o volume ficou no valor?). Se não deu, ela avisa ("Hmm, o Spotify não parece ter aberto. Quer que eu tente de novo?"), o registro de atividades marca a ação como não confirmada e o erro vira aprendizado.
+- Quando uma ferramenta falha, ela diz o que falhou em vez de "pronto".
+- "Deu certo?" / "funcionou?": o resultado do último pedido. "O que você fez?": o registro de atividades.
+
+## Acesso completo ao PC (autonomia)
+
+Em Ajustes → **Inteligência e memória → Autonomia**:
+- **Normal** (padrão): fechar programas, mover arquivos e comandos fora da lista pedem "sim".
+- **Acesso completo:** ela faz tudo isso sozinha, inclusive comandos do terminal fora da lista. Só o irreversível continua pedindo confirmação com rosto: apagar, desligar/reiniciar e comandos destrutivos (`del`, `rd`, `format`, `Remove-Item`, `reg delete`, `-Recurse`, comandos com `|` ou `&`...). Tudo continua no registro de atividades.
 
 ## Falando com ela
 
@@ -197,9 +230,10 @@ O reconhecimento facial da Sexta-Feira é bom para o dia a dia, mas não substit
 
 ## Jornal (central de notícias)
 
-- **"Abre o jornal"** (ou o ícone na barra lateral): abas **Destaques**, **Brasil**, **Tecnologia**, **Seus temas** e **Salvas**. A mesma notícia dada por várias fontes aparece uma vez só, com "(3 fontes)" — e sobe nos destaques.
+- **"Abre o jornal"** (ou o ícone na barra lateral): abas **Destaques**, **Brasil**, **Tecnologia**, **IA**, **Seus temas** e **Salvas**. A mesma notícia dada por várias fontes aparece uma vez só, com "(3 fontes)" — e sobe nos destaques.
 - **Toque ou pinça rápida numa notícia:** ela abre a matéria, resume em até 5 frases e lê em voz alta. **Arraste para o lado** (ou toque no marcador) para salvar para depois.
 - Por voz: "lê a segunda notícia de tecnologia", "salva a primeira", "me avisa quando sair notícia de RTX 60", "para de me avisar sobre RTX 60", "quais temas você acompanha?".
+- **TI e IA do dia:** "notícias de TI e IA de hoje", "notícias de IA", "o que saiu de inteligência artificial hoje" — abre o Jornal na aba IA e lê as 3 principais de IA e 2 de TI publicadas nas últimas 24 horas. O briefing da manhã também traz IA.
 - **Seus temas:** a cada 15 minutos ela procura novidades e avisa por voz, no HUD e no celular — só do que saiu depois que você pediu.
 - **Briefing:** "bom dia" ou "briefing" — saudação, clima, agenda do dia, 5 manchetes do Brasil, 5 de tecnologia e seus temas, em até 2 minutos (a IA escreve o roteiro; sem IA, ela lê as manchetes). Para ouvir todo dia: "agenda o briefing para as 7h30 nos dias úteis" (vira um protocolo que dá para ajustar no editor).
 - **Fontes** em `config/noticias.yaml`: Google Notícias e g1 (Brasil); Tecnoblog, Canaltech, Olhar Digital, The Verge, Hacker News e GitHub em alta (tecnologia). Qualquer feed RSS/Atom serve; crie outras categorias (ex.: `esportes:`) e elas entram nos Destaques.

@@ -275,3 +275,9 @@ def test_noticias_de_ti_e_ia_do_dia(app, monkeypatch):
     assert jornal["dados"]["aba"] == "ia"
     assert app.agente.processar("o que saiu de inteligência artificial hoje", canal="texto", falar=False)["caminho"] == "atalho"
     assert "ia" in app.jornal.fontes
+def test_holograma_memoria(app):
+    app.memoria.lembrar("Gosta de café")
+    r = app.registro.executar("holograma", {"acao": "mostrar", "tipo": "memoria"}, app.contexto("texto"))
+    assert r["ok"], r
+    h = next(h for h in app.hologramas.lista() if h["tipo"] == "memoria")
+    assert h["dados"]["fatos"][0]["texto"] == "Gosta de café"

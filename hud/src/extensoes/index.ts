@@ -1,5 +1,6 @@
 // Junta as extensões do HUD e registra os eventos delas no store.
 import { aoEvento } from "../lib/store";
+import aprendizado from "./aprendizado";
 import comunicacao from "./comunicacao";
 import documentos from "./documentos";
 import maosLivres from "./maosLivres";
@@ -8,7 +9,7 @@ import sentinela from "./sentinela";
 import traje from "./traje";
 import type { Extensao, HologramaExtra } from "./tipos";
 
-export const EXTENSOES: Extensao[] = [traje, oficina, sentinela, comunicacao, maosLivres, documentos];
+export const EXTENSOES: Extensao[] = [traje, oficina, sentinela, comunicacao, maosLivres, documentos, aprendizado];
 
 for (const ext of EXTENSOES) {
   for (const [tipo, funcao] of Object.entries(ext.eventos ?? {})) aoEvento(tipo, funcao);
