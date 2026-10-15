@@ -307,12 +307,17 @@ class SextaFeira:
         if self.prefs.get("saudacao_ao_iniciar") and self.com_voz:
             nome = self.prefs.get("nome")
             frase = f"Sexta-Feira online. {saudacao()}{', ' + nome if nome else ''}."
+            complemento = ""
             agora = datetime.now()
             if agora.weekday() == 4 and agora.hour >= 16:
-                frase += " E hoje é sexta-feira: sextou!"
+                complemento += " E hoje é sexta-feira: sextou!"
             if self.sessao.bloqueada:
-                frase += " Olhe para a câmera para eu confirmar que é você."
-            self.fala.falar(frase)
+                complemento += " Olhe para a câmera para eu confirmar que é você."
+            traje = getattr(self, "traje", None)  # extensão traje: sequência "sistemas online" no HUD
+            if traje is not None and self.prefs.get("sequencia_inicial"):
+                traje.sequencia_inicial(complemento.strip())
+            else:
+                self.fala.falar(frase + complemento)
         if self.sessao.bloqueada:
             self.fala.aguardar(10)
             self.desbloquear_por_rosto(automatico=True)
