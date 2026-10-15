@@ -15,6 +15,7 @@ from . import __version__, extensoes
 from .atividades import Atividades
 from .cerebro.agente import Agente
 from .cerebro.ferramentas import Contexto, Registro
+from .aprendizado import Aprendizado
 from .cerebro.memoria import Memoria
 from .config import Config, Preferencias
 from .estado import Estado
@@ -49,7 +50,7 @@ log = logging.getLogger("sexta")
 BRIEFING_SISTEMA = """Você é a Sexta-Feira, assistente pessoal. Escreva o briefing matinal que será FALADO em voz alta, \
 em português do Brasil, a partir dos dados em JSON. Regras: no máximo 230 palavras (cerca de 2 minutos); comece com a \
 saudação e a data; depois o clima em uma frase; a agenda do dia (se vazia, diga que está livre) e as tarefas para hoje; as principais notícias do \
-Brasil e de tecnologia, cada uma em uma frase curta e clara, juntando as que falam do mesmo assunto; e os temas que o \
+Brasil, de tecnologia e de inteligência artificial, cada uma em uma frase curta e clara, juntando as que falam do mesmo assunto; e os temas que o \
 usuário acompanha, se houver. Tom confiante e leve. Sem markdown, listas, emojis nem links. Termine com uma frase curta."""
 
 
@@ -64,6 +65,8 @@ def briefing_simples(dados: dict) -> str:
         partes.append("No Brasil: " + "; ".join(dados["brasil"][:5]) + ".")
     if dados.get("tecnologia"):
         partes.append("Em tecnologia: " + "; ".join(dados["tecnologia"][:5]) + ".")
+    if dados.get("ia"):
+        partes.append("Em inteligência artificial: " + "; ".join(dados["ia"][:3]) + ".")
     if dados.get("temas"):
         partes.append("Dos seus temas: " + "; ".join(dados["temas"][:3]) + ".")
     return " ".join(partes)
@@ -79,7 +82,8 @@ class SextaFeira:
         self.prefs = Preferencias(cfg.dados / "preferencias.json")
         self.estado = Estado(self.barramento)
         self.acesso = Acesso(cfg.dados / "acesso.json")
-        self.memoria = Memoria(cfg.dados / "memoria.json")
+        self.memoria = Memoria(cfg.dados / "memoria.db", legado=cfg.dados / "memoria.json")
+        self.aprendizado = Aprendizado(self)
 
         self.camera = Camera(self)
         self.rosto = Rosto(self)
@@ -109,6 +113,7 @@ class SextaFeira:
 
         self.registro = Registro()
         self.registro.ao_executar = self.atividades.anotar
+        self.registro.autonomia = lambda: str(self.prefs.get("autonomia") or "normal")
         registrar_ferramentas(self, self.registro)
         extensoes.registrar(self, self.registro)
         self.agente = Agente(self)
@@ -290,6 +295,7 @@ class SextaFeira:
         self.vigia.iniciar()
         self.jornal.iniciar()
         self.agenda.iniciar()
+        self.aprendizado.iniciar()
         extensoes.iniciar(self)
         threading.Thread(target=self._vigiar_windows, name="vigia-windows", daemon=True).start()
         threading.Thread(target=self.apps.menu_iniciar, daemon=True).start()
@@ -312,6 +318,10 @@ class SextaFeira:
             self.desbloquear_por_rosto(automatico=True)
 
     def _aquecer_cerebro(self) -> None:
+        if self.com_voz:  # o "deixa eu ver" dos pedidos complexos toca em milissegundos
+            from .voz.fala import RECONHECIMENTOS
+
+            self.fala.preaquecer(RECONHECIMENTOS)
         self.agente.aquecer()
         verificar_memoria = getattr(self.agente.ollama, "uso_de_memoria", None)
         if verificar_memoria:  # Ollama: avisa se o modelo não coube na placa de vídeo
@@ -380,7 +390,7 @@ class SextaFeira:
         self._rodando = False
         log.info("Encerrando a Sexta-Feira")
         extensoes.encerrar(self)
-        for parar in (self.voz.parar, self.lembretes.parar, self.vigia.parar, self.rotinas.parar, self.jornal.parar, self.agenda.parar, lambda: self.foco.encerrar(silencioso=True), self.maos.desligar,
+        for parar in (self.voz.parar, self.lembretes.parar, self.vigia.parar, self.rotinas.parar, self.jornal.parar, self.agenda.parar, self.aprendizado.parar, lambda: self.foco.encerrar(silencioso=True), self.maos.desligar,
                       self.fala.encerrar):
             try:
                 parar()

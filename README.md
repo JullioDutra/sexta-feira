@@ -72,7 +72,40 @@ Na primeira vez, o Windows pergunta se o Python pode usar a rede: **permita em "
 
 **Se continuar no Ollama e estiver lento:** o log e o HUD agora avisam quando o modelo não coube na placa de vídeo e está rodando na memória RAM/CPU (a causa mais comum de lentidão extrema e de erros de memória). Nesse caso use um modelo menor (`qwen3.5:4b`), reduza `OLLAMA_CONTEXTO` ou passe para o Claude.
 
-**Memória:** a conversa sobrevive a reinícios por até 6 horas (`dados/historico.json`), e ela guarda sozinha fatos pessoais duradouros ("meu time é o Cruzeiro") em `dados/memoria.json`, que entram em todas as conversas.
+**Cérebro grátis (FreeLLMAPI):** o [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) junta os planos gratuitos de dezenas de provedores atrás de um endereço só, no formato da API do Claude. Rode-o no PC (veja o README dele; o painel fica em http://localhost:3001), cadastre as chaves dos provedores e copie a chave unificada para `LIVRE_CHAVE`. Depois:
+- `CEREBRO=livre` usa só ele (grátis; qualidade e velocidade variam conforme o provedor do momento);
+- ou, melhor, mantenha o Claude e ponha `CEREBRO_RESERVA=livre`: quando o Claude falhar (sem crédito, limite, rede), o FreeLLMAPI assume por alguns minutos e ela não fica muda. `CEREBRO_RESERVA=ollama` também funciona, para respostas sem ferramentas.
+
+## Velocidade: resposta na hora, pensamento só quando precisa
+
+- **Atalhos (milissegundos):** "abre o Spotify", "volume 30", "notícias de IA de hoje", "deu certo?" — sem IA.
+- **Pedidos simples:** vão para o cérebro rápido (Haiku), sem pensamento: a primeira palavra sai em poucas centenas de milissegundos.
+- **Pedidos complexos** (analisar, planejar, explicar, código, segurança, texto copiado...): vão para o Opus **pensando** antes de responder — e ela fala na hora um "Deixa eu ver" / "Um instante" (áudio pré-gerado na partida, toca em milissegundos), para o silêncio não parecer travamento. Dá para desligar o pensamento em Ajustes → **Inteligência e memória**.
+
+## Memória e aprendizado
+
+Tudo fica em `dados/memoria.db` (SQLite, no seu PC; a memória antiga `memoria.json` é trazida sozinha):
+
+- **Fatos sobre você** (time, nomes, projetos, rotina): ela guarda sozinha quando você conta algo duradouro, ou quando você pede ("lembra que...").
+- **Lições:** como agir para acertar. Nascem das suas correções ("não era isso", "você errou", "não abriu" — ela anota o erro e escreve a lição em segundo plano), de regras que você ensina ("aprende que quando eu falar modo cinema é para apagar as luzes") e da revisão diária.
+- **Conhecimento:** o que ela aprende em análises, pesquisas e engenharia reversa.
+- **Episódios:** cada pedido fica registrado com o que foi feito e se deu certo.
+- **Como ela usa:** a cada pedido, uma busca (FTS5, milissegundos) junta os fatos, lições e conhecimentos relevantes à mensagem — o prompt de sistema não muda, então o cache do cérebro continua valendo.
+- **Revisão diária (3h):** o cérebro revisa os pedidos do dia, extrai fatos e lições novas e enfraquece o que nunca é usado. "Revisa sua memória" faz na hora.
+- **Por voz:** "o que você aprendeu hoje?", "o que você sabe sobre mim?" (abre o holograma **Memória**, onde dá para esquecer itens), "esquece que...".
+- A conversa em si sobrevive a reinícios por até 6 horas (`dados/historico.json`).
+
+## Ela sabe se deu certo
+
+- Abrir e fechar programas e mudar o volume são **conferidos** alguns segundos depois, em segundo plano (o programa abriu? fechou? o volume ficou no valor?). Se não deu, ela avisa ("Hmm, o Spotify não parece ter aberto. Quer que eu tente de novo?"), o registro de atividades marca a ação como não confirmada e o erro vira aprendizado.
+- Quando uma ferramenta falha, ela diz o que falhou em vez de "pronto".
+- "Deu certo?" / "funcionou?": o resultado do último pedido. "O que você fez?": o registro de atividades.
+
+## Acesso completo ao PC (autonomia)
+
+Em Ajustes → **Inteligência e memória → Autonomia**:
+- **Normal** (padrão): fechar programas, mover arquivos e comandos fora da lista pedem "sim".
+- **Acesso completo:** ela faz tudo isso sozinha, inclusive comandos do terminal fora da lista. Só o irreversível continua pedindo confirmação com rosto: apagar, desligar/reiniciar e comandos destrutivos (`del`, `rd`, `format`, `Remove-Item`, `reg delete`, `-Recurse`, comandos com `|` ou `&`...). Tudo continua no registro de atividades.
 
 ## Falando com ela
 
@@ -197,9 +230,10 @@ O reconhecimento facial da Sexta-Feira é bom para o dia a dia, mas não substit
 
 ## Jornal (central de notícias)
 
-- **"Abre o jornal"** (ou o ícone na barra lateral): abas **Destaques**, **Brasil**, **Tecnologia**, **Seus temas** e **Salvas**. A mesma notícia dada por várias fontes aparece uma vez só, com "(3 fontes)" — e sobe nos destaques.
+- **"Abre o jornal"** (ou o ícone na barra lateral): abas **Destaques**, **Brasil**, **Tecnologia**, **IA**, **Seus temas** e **Salvas**. A mesma notícia dada por várias fontes aparece uma vez só, com "(3 fontes)" — e sobe nos destaques.
 - **Toque ou pinça rápida numa notícia:** ela abre a matéria, resume em até 5 frases e lê em voz alta. **Arraste para o lado** (ou toque no marcador) para salvar para depois.
 - Por voz: "lê a segunda notícia de tecnologia", "salva a primeira", "me avisa quando sair notícia de RTX 60", "para de me avisar sobre RTX 60", "quais temas você acompanha?".
+- **TI e IA do dia:** "notícias de TI e IA de hoje", "notícias de IA", "o que saiu de inteligência artificial hoje" — abre o Jornal na aba IA e lê as 3 principais de IA e 2 de TI publicadas nas últimas 24 horas. O briefing da manhã também traz IA.
 - **Seus temas:** a cada 15 minutos ela procura novidades e avisa por voz, no HUD e no celular — só do que saiu depois que você pediu.
 - **Briefing:** "bom dia" ou "briefing" — saudação, clima, agenda do dia, 5 manchetes do Brasil, 5 de tecnologia e seus temas, em até 2 minutos (a IA escreve o roteiro; sem IA, ela lê as manchetes). Para ouvir todo dia: "agenda o briefing para as 7h30 nos dias úteis" (vira um protocolo que dá para ajustar no editor).
 - **Fontes** em `config/noticias.yaml`: Google Notícias e g1 (Brasil); Tecnoblog, Canaltech, Olhar Digital, The Verge, Hacker News e GitHub em alta (tecnologia). Qualquer feed RSS/Atom serve; crie outras categorias (ex.: `esportes:`) e elas entram nos Destaques.
@@ -367,3 +401,135 @@ Os registros ficam em `dados/logs/sexta.log`.
 Para mexer no HUD (precisa do Node.js): `cd hud`, `npm install`, `npm run dev` (abre em `localhost:5173` com a Sexta-Feira rodando) e `npm run build` para gerar `hud/dist`.
 
 Comandos úteis: `iniciar.bat baixar`, `iniciar.bat diagnostico`, `iniciar.bat microfones`, `iniciar.bat testar-voz "olá"`, `iniciar.bat testar-ativacao`, `iniciar.bat pin`, `iniciar.bat dispositivos`, `iniciar.bat abrir`.
+
+## Personalidade e tradução
+
+### Personalidade
+
+A Sexta-Feira tem três jeitos de falar:
+
+- **Amigável** (padrão): o tom de sempre. Confiante, eficiente, leal e calorosa, com um humor leve e seco.
+- **Formal**: cortês e precisa, sem gírias nem piadas. Chama você de "senhor", ou pelo tratamento escolhido em **Ajustes** ("senhora", "doutora"…).
+- **Sarcástica**: humor seco e provocações leves, no estilo das IAs dos filmes. Nunca é grosseira, e avisos, erros, confirmações e assuntos de segurança, saúde ou dinheiro continuam diretos e sérios.
+
+Como trocar:
+
+- **Por voz:** "modo formal", "modo amigável", "modo sarcástico", "fica mais formal", "pode ser sarcástica", "muda a personalidade para amigável". Para saber qual está valendo: "qual sua personalidade?".
+- **No HUD:** Ajustes → **Personalidade**.
+- **Em protocolos:** a ação **Personalidade** (ex.: um protocolo de reunião que a deixa formal).
+
+A personalidade vale para as respostas da IA e para as respostas prontas ("Às ordens", "Tudo bem, cancelado", "Pois não?"). No modo formal, os lembretes, os avisos da agenda e os alertas do Jornal também passam a dizer "senhor". O prompt de sistema só muda quando você troca de personalidade, então o cache do cérebro continua valendo e ela segue rápida.
+
+Se você tiver um protocolo ou layout chamado "formal" (ou "sarcástico"…), "modo formal" continua rodando o seu protocolo ou layout. "Modo foco", "modo jogo", "modo escuro" e os outros modos não mudam.
+
+### Tradutor ao vivo (conversa por voz)
+
+Com o tradutor, a Sexta-Feira serve de intérprete numa conversa com alguém que fala outro idioma.
+
+- **Para ligar:** "modo tradutor para inglês", "traduz para espanhol o que eu falar", "tradução ao vivo em francês", "liga o tradutor em japonês". Sem dizer o idioma ("modo tradutor"), ela usa o último (inglês, na primeira vez).
+- **Idiomas:** inglês, espanhol, francês, alemão, italiano, japonês, chinês (mandarim), coreano e russo.
+- **Como funciona:** com o modo ligado, ela ouve sem precisar ser chamada. Cada fala é transcrita e ela identifica o idioma, só entre o português e o idioma escolhido. O que for dito em português sai falado no outro idioma, com uma voz nativa; o que for dito no outro idioma sai em português, com a voz dela. Ela só volta a ouvir depois de terminar de falar, para não traduzir a própria voz.
+- **Holograma "Tradução":** mostra a conversa, com o original e a tradução e a fala mais nova embaixo, e tem o botão **Parar tradutor**.
+- **Trocar de idioma sem sair:** "Sexta-Feira, modo tradutor para alemão".
+- **Para sair:** "para de traduzir", "sair do tradutor", "Sexta-Feira, chega", "Sexta-Feira, para", **Esc** no HUD do PC ou o botão do holograma. Com Ajustes ou outra janela aberta, o Esc só fecha a janela.
+- **Para falar com ela no meio da conversa, sem tradução:** chame "Sexta-Feira" enquanto ela fala, aperte o botão de falar (ou Espaço) antes de falar, ou diga só "Sexta-Feira" e espere o "Pois não?". A fala seguinte vai para ela, como fora do modo tradutor: "que horas são?", "fecha o Chrome"… Se ela pedir confirmação, basta responder "sim". Com um alarme tocando, "Sexta-Feira!" desliga o alarme.
+- Uma frase que só começa com a palavra ("sexta-feira de manhã") conta como conversa e é traduzida.
+
+### Traduzir a tela e o texto copiado
+
+- **Tela:** "traduz a tela", "traduz essa página", "traduz o que está na tela para inglês". Ela captura a tela e o modelo de visão transcreve e traduz o texto principal, para o português se você não disser o idioma. O original e a tradução aparecem no holograma "Tradução" e ela lê o começo. Isso precisa de um modelo com visão (`OLLAMA_MODELO_VISAO`) ou do cérebro Claude.
+- **Texto copiado:** "traduz o que eu copiei para inglês", "traduz o texto copiado". Ela traduz o texto da área de transferência (até 5.000 caracteres), mostra no holograma e já deixa a tradução copiada: é só colar. Sem idioma, vai para o português, ou para o inglês se o texto já estiver em português.
+
+### Em protocolos
+
+Duas ações novas:
+
+- **Personalidade:** `formal`, `amigável` ou `sarcástica`.
+- **Modo tradutor:** um idioma (liga) ou `desligar`.
+
+```yaml
+  reuniao internacional:
+    frases: ["reunião internacional", "reunião em inglês"]
+    passos:
+      - personalidade: formal
+      - tradutor: inglês
+```
+
+### Privacidade
+
+- A fala é transcrita no próprio PC, pelo Whisper. Nada é gravado em disco: a conversa traduzida fica só na memória (as últimas 40 falas, para o holograma) e é apagada quando o modo tradutor é ligado de novo.
+- A tradução usa o cérebro configurado. Com o Ollama, tudo fica no PC. Com o Claude (`CEREBRO=claude`), as falas, o texto copiado e a captura da tela vão para a API da Anthropic.
+- As vozes de cada idioma vêm do edge-tts, um serviço online da Microsoft: o texto traduzido é enviado para gerar o áudio, como já acontece com a voz dela.
+- Com o modo tradutor ligado, ela ouve tudo o que é dito perto do microfone sem a palavra de ativação, inclusive outras pessoas. Desligue quando a conversa acabar.
+
+### Requisitos e limitações (Windows)
+
+- **Microfone:** o modo tradutor não liga sem ele. Use **fones de ouvido** se puder. Sem fones, o microfone capta a voz dela: ela espera terminar de falar antes de ouvir, mas um "sexta-feira" dito por ela (ao traduzir "Friday") pode ser confundido com o próprio nome.
+- **Internet:** necessária para as vozes nativas (edge-tts). Sem internet, ou com `VOZ_MOTOR=windows`, ela usa as vozes instaladas no Windows. Instale os idiomas de fala em **Configurações → Hora e idioma → Fala**. Sem uma voz do idioma, a frase sai com a voz padrão do sistema; o Diagnóstico avisa.
+- **Whisper multilíngue:** use `WHISPER_MODELO=small`, `medium` ou outro multilíngue. Os modelos terminados em `.en` não detectam idioma.
+- **Frases muito curtas** ("ok", "sim") às vezes têm o idioma detectado errado. Uma frase mais completa resolve. A tradução do que é falado usa o cérebro rápido (`OLLAMA_MODELO_RAPIDO` ou `CLAUDE_MODELO_RAPIDO`), para responder logo.
+- **Uma conversa por vez:** sempre entre o português e um outro idioma.
+
+## Memória dos documentos
+
+Pergunte sobre os seus próprios arquivos — contratos, apólices, boletos, laudos, manuais — e ela responde com base no que está escrito neles, citando o arquivo e a página.
+
+- **Escolha as pastas:** em **Ajustes → Memória dos documentos** (caminho completo ou "Documentos/Contratos") ou por voz: "usa a pasta Documentos/Contratos como memória", "adiciona a pasta Contratos na memória dos documentos", "tira a pasta Contratos da memória". Também dá para listar pastas em `DOCUMENTOS_PASTAS` no `.env` (separadas por vírgula; essas só saem editando o `.env`). Por segurança, ela só aceita pastas que existem dentro da sua pasta de usuário (menos AppData e pastas ocultas como `.ssh`) ou em outros discos e na rede — nunca a pasta do Windows, de programas, um disco inteiro ou a pasta de usuário inteira.
+- **O que ela lê:** PDF (página a página), Word `.docx` (parágrafos e tabelas), `.txt`, `.md` e `.csv`. O limite é de 50 MB e 1000 páginas por arquivo e 20 mil arquivos no total. Ela pula pastas ocultas, de sistema e de programas (`node_modules`, `venv`...), atalhos e links e os temporários do Office. A leitura roda em segundo plano: começa uns 15 segundos depois que ela sobe, se repete a cada 30 minutos só no que mudou e logo depois que você muda as pastas. "Reindexa os meus documentos" ou o botão **Reindexar agora** pedem uma leitura na hora.
+- **Pergunte:** "o que diz meu contrato sobre multa?", "no contrato de aluguel, qual o prazo de aviso prévio?", "procura nos meus documentos quanto paguei de IPTU", "pergunta pros meus documentos qual o valor do condomínio". Na voz a resposta tem 2 ou 3 frases; no HUD e no celular, um pouco mais. Se os documentos não falam do assunto, ela diz que não encontrou — não completa com o que "acha". Outras formas de perguntar também funcionam pela IA ("quanto ficou o seguro do carro segundo a apólice?"); diga também "quantos documentos estão na memória?".
+- **Holograma Documentos** (barra lateral ou "abre a memória dos documentos"): mostra a resposta, os cartões das fontes (arquivo, página e o trecho com as palavras da pergunta em destaque) e um campo para perguntar de novo. No PC, **Abrir** abre o arquivo no programa padrão do Windows; no celular o holograma aparece sem esse botão.
+- **Ajustes → Memória dos documentos:** mostra as pastas (adicionar e remover; as do `.env` aparecem marcadas), o botão **Reindexar agora**, quantos documentos e trechos estão na memória, a última leitura e a lista dos arquivos que não puderam ser lidos (PDF com senha, PDF escaneado sem texto, arquivo grande demais, aberto em outro programa, só na nuvem...).
+- **Limitações:**
+  - PDFs escaneados (só imagem) não são lidos, porque não há OCR.
+  - PDF com senha para abrir fica de fora; PDF que só restringe impressão ou cópia é lido normalmente.
+  - `.doc` (Word antigo), `.xlsx` e `.pptx` não entram.
+  - Arquivos "só online" do OneDrive não são baixados: marque a pasta como **Manter sempre neste dispositivo**.
+  - Um disco externo desligado mantém o índice até voltar.
+  - O índice usa o SQLite com busca FTS5, que já vem no Python oficial do python.org.
+  - Abrir o arquivo pelo holograma só funciona no Windows.
+
+Na tabela de **Configuração (`.env`)**:
+
+| `DOCUMENTOS_PASTAS` | pastas da memória dos documentos, separadas por vírgula (somam-se às escolhidas em Ajustes) |
+
+Em **Privacidade**, na lista do que sai do PC:
+
+- **memória dos documentos** — os arquivos são lidos e indexados só no seu PC (`dados/documentos.db`). A cada pergunta, apenas a pergunta e os trechos escolhidos (até 6, de ~900 caracteres) vão para o cérebro: para a API da Anthropic se você usa o Claude; com o Ollama, nada sai do PC. Uma pasta tirada da memória deixa de aparecer nas respostas na hora. Para apagar o índice, apague `dados/documentos.db` (ele é refeito na próxima leitura).
+
+## Vídeos (editar e criar)
+
+- **Editar** (FFmpeg, no seu PC): "corta o vídeo da viagem do 0:30 ao 1:15", "junta os vídeos praia, piscina e show", "comprime o último vídeo para o WhatsApp" (ou "pra 8 MB"), "converte o vídeo X para mp4", "faz um GIF do vídeo X do 0:05 ao 0:10", "extrai o áudio do vídeo X", "tira o áudio do vídeo X", "acelera o vídeo X em 3x", "deixa o vídeo X em câmera lenta", "faz um corte vertical do vídeo X com fundo desfocado".
+- **Legendas automáticas** (Whisper, no próprio PC): "coloca legendas no vídeo X" (na imagem) ou "gera legenda do vídeo X" (só o `.srt`).
+- **Criar** com o [HyperFrames](https://github.com/heygen-com/hyperframes) (HTML animado → MP4): "cria um vídeo de 15 segundos anunciando meu canal", "faz uma intro animada com o texto X" ("vertical" ou "quadrado" mudam o formato). A IA escreve a composição, confere com o `hyperframes lint` e renderiza.
+- Tudo roda em segundo plano — o holograma **Vídeos** mostra o progresso, a prévia e os botões Abrir/Pasta — e sai num arquivo novo em `Vídeos\Sexta-Feira`: o original nunca é alterado.
+- **Requisitos:** FFmpeg (`winget install Gyan.FFmpeg`); para criar vídeos, Node.js 22+ (`winget install OpenJS.NodeJS.LTS`) e internet na hora de renderizar (o render baixa um Chrome sem interface e a biblioteca de animação). Ajustes → **Vídeos** mostra o que está instalado.
+
+## Agentes autônomos
+
+Ela coloca agentes para trabalhar sozinhos em segundo plano enquanto você faz outra coisa — vários ao mesmo tempo.
+
+- **Por voz:** "coloca um agente para pesquisar as melhores placas de vídeo até 3 mil reais", "agente navegador, abre o site X e pega o preço do produto", "coloca o agente programador para corrigir os testes do projeto bolaocopa", "status dos agentes", "o que os agentes estão fazendo?", "aprova o agente", "nega o agente", "cancela o agente navegador".
+- **Tipos:**
+  - **Navegador:** controla um navegador próprio com o [agent-browser](https://github.com/vercel-labs/agent-browser) e o [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) (rede, console, desempenho).
+  - **Pesquisador:** busca na web, lê as páginas e entrega um relatório com fontes.
+  - **Programador:** roda o Claude Code na pasta do projeto, com o método [Superpowers](https://github.com/obra/superpowers) (plano → testes → verificação antes de dizer que terminou). Só trabalha nas pastas de projeto que você liberar e sempre pede "sim" para começar.
+  - **Engenharia reversa / segurança:** usa o [REA](https://github.com/morluto/rea) (binários, apps Electron/JavaScript, .NET, APK, sites e capturas de rede) e as análises locais de segurança para explicar como algo funciona, com evidências.
+  - **Vídeo** e **automação do PC**: usam as ferramentas de vídeo e as do próprio PC.
+- **Ela sabe se cumpriu:** todo agente termina com uma conferência — ✓ concluído, ≈ parcial ou ✗ falhou, com a evidência — e o que aprendeu vai para a memória (as análises de engenharia reversa viram **conhecimento**).
+- **Segurança:** ações sensíveis param o agente em "aguardando aprovação" até você aprovar no HUD, no celular ou por voz (o "sim" solto da conversa não aprova agentes). Em **Acesso completo**, as ações do PC que pedem "sim" rodam direto; ferramentas que executam o programa analisado, mexem em processos ou apagam algo continuam pedindo aprovação.
+- **Holograma Agentes:** passos ao vivo, status, aprovar/cancelar e criar um agente escolhendo o tipo. Ajustes → **Agentes**: limites de passos e tempo, pastas de projeto, programas instalados e servidores MCP (botão **Testar**).
+- **Em protocolos:** passo `agente: "pesquisador: ..."` (veja o exemplo em `config/rotinas.yaml`).
+- **Requisitos (Windows):**
+  - Node.js LTS (`winget install OpenJS.NodeJS.LTS`) — para o REA, o Chrome DevTools MCP e o agent-browser;
+  - agent-browser: `npm install -g agent-browser` e depois `agent-browser install`;
+  - Claude Code: no PowerShell, `irm https://claude.ai/install.ps1 | iex`, depois rode `claude` uma vez para entrar na conta;
+  - Superpowers: `claude plugin marketplace add obra/superpowers-marketplace` e `claude plugin install superpowers@superpowers-marketplace`;
+  - REA (opcional, para análise de binários nativos ele usa o Ghidra ou o Hopper): veja `npx rea-agents setup`.
+
+## Segurança (análise de arquivos e revisão do PC)
+
+- **Por voz:** "analisa o arquivo setup.exe", "o último download é seguro?", "esse programa é seguro?" (a janela ativa), "revisa a segurança do PC", "quem está usando a internet?", "o que inicia com o Windows?", "quais portas estão abertas?".
+- **A análise é estática: o arquivo nunca é executado.** Ela olha hashes, tipo real (e extensão disfarçada), assinatura digital, funções que o programa usa (rede, injeção, criptografia, persistência, teclado...), textos internos (URLs, IPs, registro), apps Electron (ASAR), .NET, Office com macro, atalhos e scripts perigosos (download + execução, PowerShell codificado, desligar o Defender...). O veredito vem como **baixo, médio ou alto risco**, com os motivos, as evidências e os limites — ela nunca afirma "é vírus" sem prova.
+- **Revisão do PC** (sem administrador): Defender e outros antivírus, firewall, atualizações, UAC, área de trabalho remota, inicialização, tarefas agendadas, portas abertas, conexões por programa, programas sem assinatura ou rodando de pastas temporárias e extensões do Chrome/Edge/Brave — em ordem de prioridade, com o que fazer. Desativar um item da inicialização pede confirmação e é reversível.
+- Cada análise fica no histórico (holograma **Segurança**) e na memória dela ("aquele instalador de ontem era assinado?"). Para ir mais fundo (como o programa faz algo), ela sugere o agente de engenharia reversa.
+- **Opcional:** `VIRUSTOTAL_API_KEY` no `.env` (só o hash sai do PC, com confirmação). Revisão automática semanal: Ajustes → **Segurança**.

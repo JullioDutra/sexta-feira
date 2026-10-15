@@ -147,7 +147,7 @@ def test_fila_de_fala(app, monkeypatch):
     fala.reprodutor = ReprodutorFalso()
     sintetizados = []
 
-    def sintetizar(texto):
+    def sintetizar(texto, voz=None):
         sintetizados.append(texto)
         return tom([(440, 0.1)]), 24000
 

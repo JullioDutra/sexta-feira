@@ -27,6 +27,7 @@ from urllib.parse import quote_plus
 import httpx
 import yaml
 
+from ..cerebro import personalidade
 from ..util.texto import normalizar
 from .noticias import BASE, PARAMS, TOPICOS, ha_quanto
 
@@ -45,8 +46,15 @@ FONTES_PADRAO: dict[str, list[dict[str, str]]] = {
         {"nome": "Hacker News", "url": "hackernews:"},
         {"nome": "GitHub em alta", "url": "github:trending"},
     ],
+    "ia": [
+        {"nome": "Google Notícias", "url": "google:inteligência artificial"},
+        {"nome": "The Decoder", "url": "https://the-decoder.com/feed/"},
+        {"nome": "TechCrunch IA", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
+        {"nome": "Ars Technica IA", "url": "https://arstechnica.com/ai/feed/"},
+        {"nome": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},
+    ],
 }
-ABAS = ["destaques", "brasil", "tecnologia", "temas", "salvas"]
+ABAS = ["destaques", "brasil", "tecnologia", "ia", "temas", "salvas"]
 VAZIAS = {"a", "o", "as", "os", "de", "do", "da", "dos", "das", "e", "em", "no", "na", "nos", "nas", "um", "uma",
           "para", "por", "com", "que", "se", "ao", "the", "of", "to", "in", "and", "for", "on", "is", "with", "apos",
           "sobre", "como", "mais", "diz", "vai", "ser", "tem", "seu", "sua"}
@@ -113,6 +121,22 @@ def interpretar_feed(xml: str | bytes, fonte: str, limite: int = 15) -> list[dic
         if len(itens) >= limite:
             break
     return itens
+
+
+def do_dia(itens: list[dict[str, Any]], horas: float = 24) -> list[dict[str, Any]]:
+    """Só as notícias das últimas ``horas`` (as sem data ficam de fora, se houver as com data)."""
+    limite = datetime.now(timezone.utc) - timedelta(hours=horas)
+    recentes = []
+    for i in itens:
+        publicado = i.get("publicado")
+        if isinstance(publicado, str):
+            publicado = _data(publicado)
+        if publicado is not None:
+            if publicado.tzinfo is None:
+                publicado = publicado.replace(tzinfo=timezone.utc)
+            if publicado >= limite:
+                recentes.append(i)
+    return recentes
 
 
 # -- agrupamento ----------------------------------------------------------------------------
@@ -251,6 +275,7 @@ class Jornal:
                     itens.append({"nome": str(nome), "url": str(url)})
             fontes[normalizar(str(categoria))] = itens
         if fontes:
+            fontes.setdefault("ia", list(FONTES_PADRAO["ia"]))  # aba nova: vale mesmo em arquivos antigos
             self.fontes = fontes
 
     def _ler_json(self, arquivo: Path, padrao):
@@ -342,12 +367,13 @@ class Jornal:
     def abas(self) -> dict[str, list[dict[str, Any]]]:
         brasil = self.coletar("brasil")[:12]
         tecnologia = self.coletar("tecnologia")[:12]
-        outras = [g for c in self.fontes if c not in ("brasil", "tecnologia") for g in self.coletar(c)[:6]]
-        destaques = agrupar([*brasil[:8], *tecnologia[:8], *outras])[:10]
+        ia = self.coletar("ia")[:12]
+        outras = [g for c in self.fontes if c not in ("brasil", "tecnologia", "ia") for g in self.coletar(c)[:6]]
+        destaques = agrupar([*brasil[:8], *tecnologia[:8], *ia[:5], *outras])[:10]
         temas = []
         for t in self.temas():
             temas += self.buscar_tema(t["tema"])[:4]
-        resultado = {"destaques": destaques, "brasil": brasil, "tecnologia": tecnologia, "temas": temas,
+        resultado = {"destaques": destaques, "brasil": brasil, "tecnologia": tecnologia, "ia": ia, "temas": temas,
                      "salvas": self.salvas()}
         self.ultimas = resultado
         return resultado
@@ -463,7 +489,7 @@ class Jornal:
         por_tema: dict[str, list[dict]] = {}
         for tema, item in novidades:
             por_tema.setdefault(tema, []).append(item)
-        tratamento = self.app.prefs.get("tratamento") or "chefe"
+        tratamento = personalidade.tratamento(self.app.prefs)
         for tema, itens in por_tema.items():
             primeiro = itens[0]
             extra = f" e mais {len(itens) - 1}" if len(itens) > 1 else ""
@@ -493,4 +519,5 @@ class Jornal:
     def dados_briefing(self) -> dict[str, Any]:
         return {"brasil": [i["titulo"] for i in self.coletar("brasil")[:5]],
                 "tecnologia": [i["titulo"] for i in self.coletar("tecnologia")[:5]],
+                "ia": [i["titulo"] for i in do_dia(self.coletar("ia"))[:3]],
                 "temas": [f"{i['tema']}: {i['titulo']}" for t in self.temas() for i in self.buscar_tema(t["tema"])[:1]]}

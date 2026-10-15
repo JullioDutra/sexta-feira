@@ -29,19 +29,22 @@ BETA_FALLBACK = "server-side-fallback-2026-07-01"
 
 class ClienteClaude:
     def __init__(self, modelo: str = MODELO_PADRAO, *, chave: str = "", esforco_voz: str = "low",
-                 esforco_texto: str = "medium", cliente=None) -> None:
+                 esforco_texto: str = "medium", cliente=None, url: str = "", nome: str = "Claude") -> None:
         self.modelo = modelo or MODELO_PADRAO
+        self.nome = nome
         self.esforco_voz = esforco_voz
         self.esforco_texto = esforco_texto
         self.pensar = False
-        self.url = "https://api.anthropic.com"
+        self.url = url or "https://api.anthropic.com"
+        # recursos que só a API oficial tem (FreeLLMAPI e outros compatíveis ignoram ou recusam)
+        self.oficial = not url
         if cliente is not None:
             self._cliente = cliente
         else:
             import anthropic
 
             # sem chave explícita, o SDK lê ANTHROPIC_API_KEY (ou o login do `ant`)
-            self._cliente = anthropic.Anthropic(api_key=chave or None, max_retries=2,
+            self._cliente = anthropic.Anthropic(api_key=chave or None, base_url=url or None, max_retries=2,
                                                 timeout=anthropic.Timeout(60.0, connect=5.0))
 
     # ------------------------------------------------------------------
@@ -94,31 +97,41 @@ class ClienteClaude:
                           "eager_input_streaming": True})
         return saida
 
-    def _parametros(self, mensagens, ferramentas, modelo: str | None, max_tokens: int | None, voz: bool) -> dict:
+    def _parametros(self, mensagens, ferramentas, modelo: str | None, max_tokens: int | None, voz: bool,
+                    pensar: bool = False) -> dict:
         sistema, conversa = self._separar(mensagens)
         modelo = modelo or self.modelo
+        esforco = self.esforco_voz if voz else self.esforco_texto
+        if pensar:  # pedido complexo: pensa antes de responder, com mais esforço
+            esforco = {"low": "medium", "medium": "high"}.get(esforco, esforco)
         params: dict[str, Any] = {
             "model": modelo,
             "max_tokens": 8000 if voz else 16000,
             "system": sistema,
             "messages": conversa,
-            "output_config": {"effort": self.esforco_voz if voz else self.esforco_texto},
+            "output_config": {"effort": esforco},
             "cache_control": {"type": "ephemeral"},  # a conversa também entra no cache
         }
+        if pensar:
+            params["thinking"] = {"type": "adaptive"}
         if ferramentas:
             params["tools"] = self._ferramentas(ferramentas)
+        if not self.oficial:  # API compatível (ex.: FreeLLMAPI): só o básico do formato
+            for chave in ("output_config", "cache_control", "thinking"):
+                params.pop(chave, None)
+            return params
         if modelo in COM_FALLBACK:
             params["betas"] = [BETA_FALLBACK]
             params["fallbacks"] = "default"
         return params
 
     def conversar(self, mensagens: list[dict[str, Any]], ferramentas: list[dict] | None = None,
-                  cancelado=lambda: False, *, modelo: str | None = None, max_tokens: int | None = None
-                  ) -> Iterator[dict[str, Any]]:
+                  cancelado=lambda: False, *, modelo: str | None = None, max_tokens: int | None = None,
+                  pensar: bool = False) -> Iterator[dict[str, Any]]:
         import anthropic
 
         voz = max_tokens is not None  # o agente só limita tokens no canal de voz
-        params = self._parametros(mensagens, ferramentas, modelo, max_tokens, voz)
+        params = self._parametros(mensagens, ferramentas, modelo, max_tokens, voz, pensar)
         for tentativa in range(3):
             houve_texto = False
             try:
@@ -141,11 +154,11 @@ class ClienteClaude:
             except anthropic.AuthenticationError as erro:
                 raise ErroOllama("A chave da API do Claude é inválida. Confira ANTHROPIC_API_KEY no .env.") from erro
             except anthropic.RateLimitError as erro:
-                raise ErroOllama("Limite de uso da API do Claude atingido. Tente de novo em instantes.") from erro
+                raise ErroOllama(f"Limite de uso da API do {self.nome} atingido. Tente de novo em instantes.") from erro
             except anthropic.APIConnectionError as erro:
-                raise ErroOllama("Sem conexão com o Claude. Confira a internet.") from erro
+                raise ErroOllama(f"Sem conexão com o {self.nome}. Confira a internet.") from erro
             except anthropic.APIStatusError as erro:
-                raise ErroOllama(f"Erro da API do Claude ({erro.status_code}): {erro.message}") from erro
+                raise ErroOllama(f"Erro da API do {self.nome} ({erro.status_code}): {erro.message}") from erro
 
         if final.stop_reason == "refusal":
             yield {"tipo": "texto", "texto": " Não posso ajudar com isso."}
@@ -186,13 +199,13 @@ class ClienteClaude:
         import anthropic
 
         try:
+            extras = {"output_config": {"effort": "low"}} if self.oficial else {}
             r = self._cliente.messages.create(model=modelo or self.modelo, max_tokens=8000, system=sistema,
-                                              messages=[{"role": "user", "content": texto}],
-                                              output_config={"effort": "low"})
+                                              messages=[{"role": "user", "content": texto}], **extras)
         except anthropic.APIConnectionError as erro:
-            raise ErroOllama("Sem conexão com o Claude. Confira a internet.") from erro
+            raise ErroOllama(f"Sem conexão com o {self.nome}. Confira a internet.") from erro
         except anthropic.APIStatusError as erro:
-            raise ErroOllama(f"Erro da API do Claude ({erro.status_code}): {erro.message}") from erro
+            raise ErroOllama(f"Erro da API do {self.nome} ({erro.status_code}): {erro.message}") from erro
         if r.stop_reason == "refusal":
             return ""
         return "".join(b.text for b in r.content if b.type == "text").strip()
@@ -211,15 +224,17 @@ class ClienteClaude:
                                   "output_config": {"effort": "low"}}
         if sistema:
             params["system"] = sistema
-        if params["model"] in COM_FALLBACK:
+        if not self.oficial:
+            params.pop("output_config")
+        elif params["model"] in COM_FALLBACK:
             params["betas"] = [BETA_FALLBACK]
             params["fallbacks"] = "default"
         try:
             resposta = self._cliente.beta.messages.create(**params)
         except anthropic.APIConnectionError as erro:
-            raise ErroOllama("Sem conexão com o Claude. Confira a internet.") from erro
+            raise ErroOllama(f"Sem conexão com o {self.nome}. Confira a internet.") from erro
         except anthropic.APIStatusError as erro:
-            raise ErroOllama(f"Erro da API do Claude ({erro.status_code}): {erro.message}") from erro
+            raise ErroOllama(f"Erro da API do {self.nome} ({erro.status_code}): {erro.message}") from erro
         if resposta.stop_reason == "refusal":
             return "Não posso analisar essa imagem."
         return "".join(b.text for b in resposta.content if b.type == "text").strip()

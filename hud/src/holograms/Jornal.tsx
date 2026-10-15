@@ -27,6 +27,7 @@ const ABAS: [string, string][] = [
   ["destaques", "Destaques"],
   ["brasil", "Brasil"],
   ["tecnologia", "Tecnologia"],
+  ["ia", "IA"],
   ["temas", "Seus temas"],
   ["salvas", "Salvas"],
 ];

@@ -37,7 +37,7 @@ from typing import Any, Callable
 
 log = logging.getLogger(__name__)
 
-MODULOS = ["traje", "oficina", "sentinela", "comunicacao", "maos_livres", "documentos"]
+MODULOS = ["traje", "oficina", "sentinela", "comunicacao", "maos_livres", "documentos", "aprendizado", "video", "seguranca", "agentes"]
 
 _carregados: list[ModuleType] | None = None
 _preparado = False

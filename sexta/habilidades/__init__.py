@@ -14,6 +14,7 @@ from .hologramas import TIPOS as TIPOS_HOLOGRAMA
 from .lembretes import REPETICOES
 from .noticias import CATEGORIAS, ErroNoticias
 from .rotinas import ACOES_SEGURAS, CONDICOES, GATILHOS
+from .terminal import destrutivo as terminal_destrutivo
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,28 @@ def _nivel_computador(args: dict) -> int:
 def _descrever_computador(args: dict) -> str:
     return {"desligar": "desligar o computador", "reiniciar": "reiniciar o computador",
             "suspender": "suspender o computador"}.get(args.get("acao", ""), "essa ação no computador")
+
+
+def _conferir_volume(args: dict, resultado: dict):
+    """Depois de "volume 30", lê o volume de volta."""
+    if args.get("acao") != "definir" or args.get("valor") is None or not windows.WINDOWS:
+        return None
+    alvo = max(0, min(100, int(args["valor"])))
+
+    def conferir():
+        time.sleep(0.5)
+        atual = windows.volume_atual()
+        if atual is None:
+            return None
+        if abs(atual - alvo) <= 2:
+            return True, f"Volume conferido em {atual}%."
+        return False, f"O volume ficou em {atual}%, não em {alvo}%."
+    return conferir
+
+
+def _dados_memoria(app) -> dict:
+    return {"estatisticas": app.memoria.estatisticas(), "fatos": app.memoria.itens("fato", 60),
+            "licoes": app.memoria.itens("licao", 40), "conhecimentos": app.memoria.itens("conhecimento", 40)}
 
 
 def registrar_ferramentas(app, registro: Registro) -> None:
@@ -101,7 +124,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "abrir",
         "Abre um programa, site, pasta ou endereço no computador. Ex.: 'Spotify', 'YouTube', 'Downloads', 'github.com'.",
-        direta=True,
+        direta=True, verificar=lambda a, r: app.apps.conferir_abertura(a["alvo"]),
         alvo=P("string", "O que abrir, do jeito que o usuário falou.", obrigatorio=True),
     )
     def abrir(ctx, alvo: str):
@@ -112,6 +135,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
         "fechar_programa",
         "Fecha um programa aberto (como clicar no X; o programa pode pedir para salvar).",
         direta=True, nivel=CONFIRMAR, descrever=lambda a: f"fechar {a.get('nome', 'o programa')}",
+        verificar=lambda a, r: app.apps.conferir_fechamento(a["nome"]),
         nome=P("string", "Nome do programa, ex.: 'Chrome', 'Spotify'.", obrigatorio=True),
     )
     def fechar_programa(ctx, nome: str):
@@ -157,7 +181,7 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     @ferramenta(
         "ajustar_volume",
         "Ajusta ou consulta o volume do computador.",
-        direta=True,
+        direta=True, verificar=_conferir_volume,
         acao=P("string", "O que fazer.", enum=["definir", "aumentar", "diminuir", "mudo", "tirar_mudo", "consultar"],
                obrigatorio=True),
         valor=P("integer", "Porcentagem 0-100 para 'definir'; para aumentar/diminuir, quantos pontos (padrão 10)."),
@@ -407,21 +431,37 @@ def registrar_ferramentas(app, registro: Registro) -> None:
     # ------------------------------------------------------------------ memória
     @ferramenta(
         "memoria",
-        "Guarda, esquece ou lista fatos sobre o usuário para lembrar em conversas futuras "
-        "(ex.: time do coração, nome da namorada, preferências).",
+        "Memória de longo prazo. lembrar: guarda um fato sobre o usuário (time, nomes, preferências, projetos). "
+        "aprender: guarda uma lição de como agir ('Quando ele pedir X, fazer Y'). buscar: procura no que você já "
+        "sabe/aprendeu (fatos, lições e conhecimentos de análises e pesquisas). esquecer, listar, aprendido_hoje.",
         direta=True,
-        acao=P("string", "Ação.", enum=["lembrar", "esquecer", "listar"], obrigatorio=True),
-        fato=P("string", "O fato, em uma frase curta na terceira pessoa. Ex.: 'O time dele é o Cruzeiro'."),
+        acao=P("string", "Ação.", enum=["lembrar", "aprender", "buscar", "esquecer", "listar", "aprendido_hoje"],
+               obrigatorio=True),
+        fato=P("string", "O fato ou a lição, em uma frase curta na terceira pessoa (ex.: 'O time dele é o Cruzeiro'); "
+                         "para buscar, o assunto."),
     )
     def memoria(ctx, acao: str, fato: str | None = None):
         if acao == "listar":
             fatos = app.memoria.listar()
-            return {"ok": True, "resumo": ("Eu sei que: " + "; ".join(fatos) + ".") if fatos else "Ainda não guardei nada."}
+            if ctx.canal != "voz" and fatos:
+                app.hologramas.mostrar("memoria", _dados_memoria(app))
+            return {"ok": True, "resumo": ("Eu sei que: " + "; ".join(fatos[:12]) + ".") if fatos else "Ainda não guardei nada."}
+        if acao == "aprendido_hoje":
+            return {"ok": True, "resumo": app.aprendizado.resumo_do_dia()}
         if not fato:
-            return {"ok": False, "resumo": "O que devo guardar?"}
+            return {"ok": False, "resumo": "Sobre o quê?"}
+        if acao == "buscar":
+            achados = app.memoria.buscar(fato, limite=8)
+            if not achados:
+                return {"ok": True, "resumo": "Não tenho nada guardado sobre isso.", "_direta": False}
+            return {"ok": True, "resumo": f"Achei {len(achados)} item(ns) na memória.", "_direta": False,
+                    "itens": [{"tipo": i["tipo"], "texto": i["texto"], "etiquetas": i["etiquetas"]} for i in achados]}
         if acao == "lembrar":
             novo = app.memoria.lembrar(fato)
             return {"ok": True, "resumo": "Anotado." if novo else "Eu já sabia disso."}
+        if acao == "aprender":
+            app.memoria.aprender("licao", fato, origem="usuario")
+            return {"ok": True, "resumo": "Aprendido."}
         removidos = app.memoria.esquecer(fato)
         return {"ok": bool(removidos), "resumo": "Esquecido." if removidos else "Não achei isso na minha memória."}
 
@@ -761,7 +801,9 @@ def registrar_ferramentas_pc(app, registro: Registro) -> None:
         "terminal",
         "Roda um comando no terminal do Windows (cmd) e devolve a saída. Comandos da lista permitida rodam na hora; "
         "outros exigem confirmação com rosto. Use para: IP, ping, git status, winget, versões instaladas etc.",
-        nivel=lambda a: LIVRE if app.terminal.permitido(a.get("comando", "")) else ROSTO,
+        nivel=lambda a: (LIVRE if app.terminal.permitido(a.get("comando", "")) else
+                         CONFIRMAR if app.prefs.get("autonomia") == "total"
+                         and not terminal_destrutivo(a.get("comando", "")) else ROSTO),
         descrever=lambda a: f"rodar o comando: {a.get('comando', '')}",
         comando=P("string", "O comando exato.", obrigatorio=True),
     )
@@ -810,12 +852,13 @@ def registrar_ferramentas_jornal(app, registro: Registro) -> None:
 
     @ferramenta(
         "jornal",
-        "Central de notícias: mostrar o holograma Jornal (abas destaques, brasil, tecnologia, temas, salvas), "
+        "Central de notícias: mostrar o holograma Jornal (abas destaques, brasil, tecnologia, ia, temas, salvas), "
+        "ti_ia (as notícias de TI e de inteligência artificial do dia), "
         "fazer o briefing do dia agora, ler (resumir) a notícia N de uma aba, salvar a notícia N para depois, "
         "gerenciar os temas que o usuário acompanha ('me avisa quando sair notícia de RTX 60') e agendar o "
         "briefing matinal num horário.",
         direta=True,
-        acao=P("string", "Ação.", enum=["mostrar", "briefing", "ler", "salvar", "temas", "adicionar_tema",
+        acao=P("string", "Ação.", enum=["mostrar", "ti_ia", "briefing", "ler", "salvar", "temas", "adicionar_tema",
                                         "remover_tema", "agendar_briefing"], obrigatorio=True),
         aba=P("string", "Aba (padrão destaques).", enum=ABAS),
         numero=P("integer", "Para ler/salvar: posição da notícia na aba (1 = a primeira)."),
@@ -828,6 +871,21 @@ def registrar_ferramentas_jornal(app, registro: Registro) -> None:
         j = app.jornal
         if acao == "briefing":
             return {"ok": True, "resumo": app.briefing(ctx)}
+        if acao == "ti_ia":
+            from .jornal import do_dia
+
+            dados = j.dados_holograma("ia")
+            app.hologramas.mostrar("jornal", dados, titulo="Jornal")
+            ia = do_dia(j.coletar("ia"))[:3]
+            ti = do_dia(j.coletar("tecnologia"))[:2]
+            if not ia and not ti:
+                return {"ok": True, "resumo": "Jornal na aba de IA, mas não achei notícias de hoje agora."}
+            partes = []
+            if ia:
+                partes.append("Em IA: " + "; ".join(i["titulo"] for i in ia) + ".")
+            if ti:
+                partes.append("Em TI: " + "; ".join(i["titulo"] for i in ti) + ".")
+            return {"ok": True, "resumo": " ".join(partes)}
         if acao == "mostrar":
             dados = j.dados_holograma(aba or "destaques")
             app.hologramas.mostrar("jornal", dados, titulo="Jornal")

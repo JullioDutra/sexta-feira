@@ -71,6 +71,12 @@ class Config:
     claude_modelo_rapido: str = "claude-haiku-5-5"  # vazio = um cérebro só
     claude_esforco_voz: str = "low"
     claude_esforco_texto: str = "medium"
+    # cérebro grátis/compatível (FreeLLMAPI fala o formato da API do Claude em /v1/messages)
+    livre_url: str = "http://localhost:3001"
+    livre_chave: str = ""
+    livre_modelo: str = "auto"
+    livre_modelo_rapido: str = ""
+    cerebro_reserva: str = ""  # "livre" ou "ollama": assume quando o principal falha
 
     # Cérebro local (Ollama)
     ollama_url: str = "http://127.0.0.1:11434"
@@ -165,6 +171,11 @@ class Config:
             claude_modelo_rapido=os.environ.get("CLAUDE_MODELO_RAPIDO", cls.claude_modelo_rapido).strip(),
             claude_esforco_voz=_env_str("CLAUDE_ESFORCO_VOZ", cls.claude_esforco_voz).lower(),
             claude_esforco_texto=_env_str("CLAUDE_ESFORCO_TEXTO", cls.claude_esforco_texto).lower(),
+            livre_url=_env_str("LIVRE_URL", cls.livre_url).rstrip("/"),
+            livre_chave=_env_str("LIVRE_CHAVE"),
+            livre_modelo=_env_str("LIVRE_MODELO", cls.livre_modelo),
+            livre_modelo_rapido=_env_str("LIVRE_MODELO_RAPIDO"),
+            cerebro_reserva=_env_str("CEREBRO_RESERVA").lower(),
             ollama_url=_env_str("OLLAMA_URL", cls.ollama_url).rstrip("/"),
             ollama_modelo=_env_str("OLLAMA_MODELO", cls.ollama_modelo),
             ollama_modelo_rapido=_env_str("OLLAMA_MODELO_RAPIDO"),
@@ -250,7 +261,9 @@ PREFERENCIAS_PADRAO: dict[str, Any] = {
     "foco_minutos": 25,
     "foco_pausa": 5,
     "foco_distracoes": ["Discord", "WhatsApp", "Telegram", "Steam"],
-    "aviso_reuniao_min": 10,  # protocolo "quando eu voltar ao PC": também procura seu rosto na câmera
+    "aviso_reuniao_min": 10,
+    "autonomia": "normal",     # "cautelosa" | "normal" | "total" (total: só o irreversível pede confirmação)
+    "pensar_complexo": True,   # pedidos complexos usam o cérebro principal pensando antes de responder  # protocolo "quando eu voltar ao PC": também procura seu rosto na câmera
 }
 
 # Preferências que o HUD pode alterar diretamente

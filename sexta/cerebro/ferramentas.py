@@ -58,6 +58,9 @@ class Ferramenta:
     nivel: int | Callable[[dict[str, Any]], int] = LIVRE
     direta: bool = False        # o resumo já é a resposta: não precisa voltar ao modelo
     descrever: Callable[[dict[str, Any]], str] | None = None  # texto da pergunta de confirmação
+    # confere depois, em segundo plano, se a ação aconteceu: recebe (args, resultado) e devolve uma
+    # função sem argumentos que responde (ok, motivo) — ou None quando não há o que conferir
+    verificar: Callable[[dict[str, Any], dict[str, Any]], Callable[[], tuple[bool, str] | None] | None] | None = None
 
     def nivel_para(self, args: dict[str, Any]) -> int:
         return self.nivel(args) if callable(self.nivel) else self.nivel
@@ -101,13 +104,16 @@ class Registro:
         self._pendente: Pendente | None = None
         self._lock = threading.Lock()
         self.ao_executar: Callable[[dict[str, Any]], None] | None = None  # registro de atividades
+        # "cautelosa" | "normal" | "total": em "total", o nível CONFIRMAR roda sem perguntar (ROSTO continua)
+        self.autonomia: Callable[[], str] = lambda: "normal"
 
     def ferramenta(self, nome_ferramenta: str, descricao: str, /, *, nivel: int | Callable = LIVRE,
-                   direta: bool = False, descrever: Callable | None = None, **parametros: dict[str, Any]):
+                   direta: bool = False, descrever: Callable | None = None, verificar: Callable | None = None,
+                   **parametros: dict[str, Any]):
         """Decorador. Os parâmetros da ferramenta vão como kwargs (podem se chamar "nome", "acao"...)."""
         def decorador(funcao: Callable[..., Any]):
             self._ferramentas[nome_ferramenta] = Ferramenta(nome_ferramenta, descricao, parametros, funcao,
-                                                            nivel, direta, descrever)
+                                                            nivel, direta, descrever, verificar)
             return funcao
         return decorador
 
@@ -141,6 +147,9 @@ class Registro:
                 return {"ok": False, "resumo": motivo}
         return self.executar(pendente.nome, pendente.argumentos, ctx, confirmado=True)
 
+    def obter(self, nome: str) -> Ferramenta | None:
+        return self._ferramentas.get(nome)
+
     def nomes(self) -> list[str]:
         return list(self._ferramentas)
 
@@ -161,6 +170,8 @@ class Registro:
         if faltando:
             return {"ok": False, "resumo": f"Faltou informar: {', '.join(faltando)}."}
         nivel = ferramenta.nivel_para(args)
+        if nivel == CONFIRMAR and not confirmado and self._autonomia() == "total":
+            confirmado = True  # acesso completo: só o irreversível (ROSTO) ainda pergunta
         if nivel > LIVRE and not confirmado and not ctx.confiavel:
             return self._pedir_confirmacao(ferramenta, args, nivel, ctx)
         try:
@@ -177,6 +188,14 @@ class Registro:
         resultado.setdefault("_direta", ferramenta.direta and bool(resultado["ok"]))
         if resultado.get("pendente"):  # a própria ferramenta pediu confirmação (ex.: comando fora da lista)
             resultado["_direta"] = True
+        elif resultado["ok"] and ferramenta.verificar is not None:
+            try:
+                conferir = ferramenta.verificar(args, resultado)
+            except Exception:  # noqa: BLE001
+                log.exception("Erro preparando a verificação de %s", nome)
+                conferir = None
+            if conferir is not None:
+                resultado["_verificar"] = conferir
         ctx.resultados.append({"ferramenta": nome, **resultado})
         self._anotar({"ferramenta": nome, "argumentos": args, "nivel": nivel, "canal": ctx.canal,
                       "situacao": "ok" if resultado["ok"] else "falhou", "resumo": resultado["resumo"]})
@@ -204,6 +223,12 @@ class Registro:
         self._anotar({"ferramenta": ferramenta.nome, "argumentos": args, "nivel": nivel, "canal": ctx.canal,
                       "situacao": "aguardando", "resumo": pergunta})
         return resultado
+
+    def _autonomia(self) -> str:
+        try:
+            return self.autonomia()
+        except Exception:  # noqa: BLE001
+            return "normal"
 
     def _anotar(self, registro: dict[str, Any]) -> None:
         if self.ao_executar is None:

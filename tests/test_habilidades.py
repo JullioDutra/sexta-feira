@@ -170,6 +170,9 @@ def test_desligar_exige_confirmacao(app):
 
 def test_memoria(app):
     app.registro.executar("memoria", {"acao": "lembrar", "fato": "Gosta de café sem açúcar"}, app.contexto())
+    # fato novo vai junto do pedido (o prompt de sistema só muda na consolidação: cache do cérebro)
+    assert "café" in app.agente._mensagem_usuario("o que eu gosto de tomar?", app.contexto())
+    app.memoria.renovar_foto()
     assert "café" in app.agente._sistema(app.contexto())
     r = app.registro.executar("memoria", {"acao": "esquecer", "fato": "café"}, app.contexto())
     assert r["ok"] and app.memoria.listar() == []

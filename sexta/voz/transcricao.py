@@ -1,9 +1,13 @@
-"""Transcrição de fala em português com faster-whisper (roda no próprio PC)."""
+"""Transcrição de fala com faster-whisper (roda no próprio PC).
+
+Em português para os comandos; com detecção de idioma para o modo tradutor.
+"""
 
 from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -19,6 +23,7 @@ ALUCINACOES = (
     "legendas pela comunidade", "amara.org", "obrigado por assistir", "inscreva-se no canal",
     "legendado por", "transcrição por", "tradução e legendas", "e aí, pessoal", "sous-titres",
     "comandos para a assistente",  # eco da dica de vocabulário
+    "thanks for watching", "thank you for watching", "ご視聴ありがとうございました",
 )
 
 
@@ -58,32 +63,49 @@ class Transcritor:
             raise RuntimeError(f"Não foi possível carregar o Whisper: {ultimo_erro}")
 
     def transcrever(self, audio: np.ndarray, dica: str = "") -> str:
-        """``audio``: float32 mono 16 kHz."""
+        """Comando em português. ``audio``: float32 mono 16 kHz."""
+        return self.transcrever_idioma(audio, "pt", dica=dica or DICA_PADRAO)[0]
+
+    def transcrever_idioma(self, audio: np.ndarray, idioma: str | None = None, candidatos: Sequence[str] = (),
+                           dica: str = "") -> tuple[str, str]:
+        """Transcreve e devolve ``(texto, idioma)``.
+
+        Com ``idioma=None`` o Whisper detecta a língua; ``candidatos`` (ex.: ``("pt", "en")`` no modo
+        tradutor) limita a detecção a esses idiomas, o que evita confundir português com espanhol ou galego.
+        ``dica``: texto que orienta o vocabulário (o mesmo idioma da fala).
+        """
         if audio.size < 16000 * 0.25:
-            return ""
+            return "", idioma or ""
         self.carregar()
         with self._lock:
-            segmentos, _info = self._modelo.transcribe(
-                audio,
-                language="pt",
-                beam_size=5 if self.dispositivo == "cuda" else 2,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 400},
-                condition_on_previous_text=False,
-                without_timestamps=True,
-                initial_prompt=dica or DICA_PADRAO,
-                no_speech_threshold=0.6,
-            )
-            textos = []
-            for seg in segmentos:
-                if seg.no_speech_prob > 0.75 and seg.avg_logprob < -0.8:
-                    continue
-                textos.append(seg.text.strip())
+            segmentos, info = self._decodificar(audio, idioma, dica)
+            if idioma is None and candidatos and info.language not in candidatos:
+                # os segmentos só são decodificados quando lidos: refazer com o idioma certo não desperdiça trabalho
+                segmentos, info = self._decodificar(audio, _mais_provavel(info.all_language_probs, candidatos), dica)
+            textos = [seg.text.strip() for seg in segmentos if not (seg.no_speech_prob > 0.75 and seg.avg_logprob < -0.8)]
         texto = " ".join(t for t in textos if t).strip()
         if any(a in texto.lower() for a in ALUCINACOES):
             log.debug("Transcrição descartada (alucinação): %s", texto)
-            return ""
-        return texto
+            return "", info.language
+        return texto, info.language
+
+    def _decodificar(self, audio: np.ndarray, idioma: str | None, dica: str):
+        return self._modelo.transcribe(
+            audio,
+            language=idioma,
+            beam_size=5 if self.dispositivo == "cuda" else 2,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 400},
+            condition_on_previous_text=False,
+            without_timestamps=True,
+            initial_prompt=dica or None,
+            no_speech_threshold=0.6,
+        )
+
+
+def _mais_provavel(probabilidades: list[tuple[str, float]] | None, candidatos: Sequence[str]) -> str:
+    chances = dict(probabilidades or [])
+    return max(candidatos, key=lambda idioma: chances.get(idioma, 0.0))
 
 
 def _tem_cuda() -> bool:

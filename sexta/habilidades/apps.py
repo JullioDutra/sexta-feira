@@ -186,6 +186,40 @@ class CatalogoApps:
             return False, f"{pedido} não parece estar aberto."
         return True, f"Fechando {pedido}."
 
+    # -- conferência: a ação aconteceu mesmo? (roda em segundo plano, depois da resposta) ----------
+    def conferir_abertura(self, pedido: str, espera: float = 6.0):
+        """Função que confere se o programa abriu (processo ou janela com o nome), ou None se não dá para saber."""
+        alvo = self.resolver(pedido)
+        if alvo is None or alvo.tipo not in ("comando", "app") or not windows.WINDOWS:
+            return None
+        nome = _PREFIXOS.sub("", normalizar(alvo.nome)).strip()
+        executaveis = PROCESSOS.get(nome)
+
+        def conferir() -> tuple[bool, str] | None:
+            fim = time.time() + espera
+            while True:
+                if aberto(nome, executaveis):
+                    return True, f"{alvo.nome} abriu."
+                if time.time() >= fim:
+                    return False, f"Hmm, {alvo.nome} não parece ter aberto. Quer que eu tente de novo?"
+                time.sleep(1.0)
+        return conferir
+
+    def conferir_fechamento(self, pedido: str, espera: float = 8.0):
+        nome = _PREFIXOS.sub("", normalizar(pedido)).strip()
+        executaveis = PROCESSOS.get(nome) or self._procurar_processo(nome)
+        if not executaveis or not windows.WINDOWS:
+            return None
+
+        def conferir() -> tuple[bool, str] | None:
+            fim = time.time() + espera
+            while time.time() < fim:
+                time.sleep(1.5)
+                if not _rodando(executaveis):
+                    return True, f"{pedido} fechado."
+            return False, f"{pedido} ainda está aberto: talvez esteja pedindo para salvar."
+        return conferir
+
     def conhece_processo(self, pedido: str) -> bool:
         """Verdadeiro se ``pedido`` é um programa conhecido ou aberto agora (usado pelos atalhos)."""
         nome = _PREFIXOS.sub("", normalizar(pedido)).strip()
@@ -208,3 +242,26 @@ class CatalogoApps:
             if nota >= 88:
                 candidatos[exe] = max(nota, candidatos.get(exe, 0))
         return sorted(candidatos, key=candidatos.get, reverse=True)[:1]
+
+
+def _rodando(executaveis: list[str]) -> bool:
+    try:
+        import psutil
+    except ImportError:
+        return False
+    alvos = {e.lower() for e in executaveis}
+    return any((p.info.get("name") or "").lower() in alvos for p in psutil.process_iter(["name"]))
+
+
+def aberto(nome: str, executaveis: list[str] | None = None) -> bool:
+    """O programa está aberto? Procura pelo processo e pelo título das janelas."""
+    if executaveis and _rodando(executaveis):
+        return True
+    if CatalogoApps._procurar_processo(nome):
+        return True
+    try:
+        from . import janelas
+
+        return janelas.encontrar(nome) is not None
+    except Exception:  # noqa: BLE001
+        return False

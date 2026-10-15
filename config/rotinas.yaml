@@ -88,3 +88,37 @@ rotinas:
         dias: [dom]
     passos:
       - plano_semana: true
+
+# Personalidade e tradutor (extensão de comunicação):
+  #   personalidade: formal | amigavel | sarcastica
+  #   tradutor: inglês | espanhol | francês | alemão | italiano | japonês | chinês | coreano | russo | desligar
+  reuniao internacional:
+    frases: ["reunião internacional", "modo reunião em inglês"]
+    passos:
+      - personalidade: formal
+      - tradutor: inglês
+
+  fim da reuniao internacional:
+    frases: ["fim da reunião internacional", "acabou a reunião"]
+    passos:
+      - tradutor: desligar
+      - personalidade: amigavel
+
+  # Segurança e agentes (Fase 7). Exemplos desligados: troque para ativo: true para usar.
+  revisao de seguranca de domingo:
+    ativo: false
+    frases: ["revisão de segurança semanal"]
+    gatilhos:
+      - horario: "10:00"
+        dias: [dom]
+    passos:
+      - revisao_seguranca: true
+
+  pesquisa de ia da manha:
+    ativo: false
+    frases: ["pesquisa de ia"]
+    gatilhos:
+      - horario: "08:00"
+        dias: [uteis]
+    passos:
+      - agente: "pesquisador: as novidades mais importantes de IA das últimas 24 horas, com fontes"
