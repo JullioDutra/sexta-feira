@@ -18,3 +18,9 @@ fontes:
     - The Verge: https://www.theverge.com/rss/index.xml
     - Hacker News: "hackernews:"
     - GitHub em alta: github:trending
+  ia:
+    - Google Notícias: "google:inteligência artificial"
+    - The Decoder: https://the-decoder.com/feed/
+    - TechCrunch IA: https://techcrunch.com/category/artificial-intelligence/feed/
+    - Ars Technica IA: https://arstechnica.com/ai/feed/
+    - Hugging Face: https://huggingface.co/blog/feed.xml

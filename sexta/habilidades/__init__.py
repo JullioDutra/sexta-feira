@@ -852,12 +852,13 @@ def registrar_ferramentas_jornal(app, registro: Registro) -> None:
 
     @ferramenta(
         "jornal",
-        "Central de notícias: mostrar o holograma Jornal (abas destaques, brasil, tecnologia, temas, salvas), "
+        "Central de notícias: mostrar o holograma Jornal (abas destaques, brasil, tecnologia, ia, temas, salvas), "
+        "ti_ia (as notícias de TI e de inteligência artificial do dia), "
         "fazer o briefing do dia agora, ler (resumir) a notícia N de uma aba, salvar a notícia N para depois, "
         "gerenciar os temas que o usuário acompanha ('me avisa quando sair notícia de RTX 60') e agendar o "
         "briefing matinal num horário.",
         direta=True,
-        acao=P("string", "Ação.", enum=["mostrar", "briefing", "ler", "salvar", "temas", "adicionar_tema",
+        acao=P("string", "Ação.", enum=["mostrar", "ti_ia", "briefing", "ler", "salvar", "temas", "adicionar_tema",
                                         "remover_tema", "agendar_briefing"], obrigatorio=True),
         aba=P("string", "Aba (padrão destaques).", enum=ABAS),
         numero=P("integer", "Para ler/salvar: posição da notícia na aba (1 = a primeira)."),
@@ -870,6 +871,21 @@ def registrar_ferramentas_jornal(app, registro: Registro) -> None:
         j = app.jornal
         if acao == "briefing":
             return {"ok": True, "resumo": app.briefing(ctx)}
+        if acao == "ti_ia":
+            from .jornal import do_dia
+
+            dados = j.dados_holograma("ia")
+            app.hologramas.mostrar("jornal", dados, titulo="Jornal")
+            ia = do_dia(j.coletar("ia"))[:3]
+            ti = do_dia(j.coletar("tecnologia"))[:2]
+            if not ia and not ti:
+                return {"ok": True, "resumo": "Jornal na aba de IA, mas não achei notícias de hoje agora."}
+            partes = []
+            if ia:
+                partes.append("Em IA: " + "; ".join(i["titulo"] for i in ia) + ".")
+            if ti:
+                partes.append("Em TI: " + "; ".join(i["titulo"] for i in ti) + ".")
+            return {"ok": True, "resumo": " ".join(partes)}
         if acao == "mostrar":
             dados = j.dados_holograma(aba or "destaques")
             app.hologramas.mostrar("jornal", dados, titulo="Jornal")

@@ -50,7 +50,7 @@ log = logging.getLogger("sexta")
 BRIEFING_SISTEMA = """Você é a Sexta-Feira, assistente pessoal. Escreva o briefing matinal que será FALADO em voz alta, \
 em português do Brasil, a partir dos dados em JSON. Regras: no máximo 230 palavras (cerca de 2 minutos); comece com a \
 saudação e a data; depois o clima em uma frase; a agenda do dia (se vazia, diga que está livre) e as tarefas para hoje; as principais notícias do \
-Brasil e de tecnologia, cada uma em uma frase curta e clara, juntando as que falam do mesmo assunto; e os temas que o \
+Brasil, de tecnologia e de inteligência artificial, cada uma em uma frase curta e clara, juntando as que falam do mesmo assunto; e os temas que o \
 usuário acompanha, se houver. Tom confiante e leve. Sem markdown, listas, emojis nem links. Termine com uma frase curta."""
 
 
@@ -65,6 +65,8 @@ def briefing_simples(dados: dict) -> str:
         partes.append("No Brasil: " + "; ".join(dados["brasil"][:5]) + ".")
     if dados.get("tecnologia"):
         partes.append("Em tecnologia: " + "; ".join(dados["tecnologia"][:5]) + ".")
+    if dados.get("ia"):
+        partes.append("Em inteligência artificial: " + "; ".join(dados["ia"][:3]) + ".")
     if dados.get("temas"):
         partes.append("Dos seus temas: " + "; ".join(dados["temas"][:3]) + ".")
     return " ".join(partes)

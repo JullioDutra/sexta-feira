@@ -254,3 +254,24 @@ def test_reserva_assume_quando_o_principal_falha():
     assert sdk.pedidos[0]["model"] == "rapido" and cerebro.usando_reserva
     assert cerebro.completar("s", "t").startswith("Vejo")  # já no reserva, sem tentar o principal
     assert cerebro.modelo == "claude-opus-5-5"
+
+
+# ---------------------------------------------------------------- notícias de TI e IA
+def test_noticias_de_ti_e_ia_do_dia(app, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    agora = datetime.now(timezone.utc)
+    feeds = {
+        "ia": [{"titulo": "Novo modelo aberto supera rivais", "link": "a", "fonte": "The Decoder", "publicado": agora},
+               {"titulo": "Notícia velha de IA", "link": "b", "fonte": "X", "publicado": agora - timedelta(days=3)}],
+        "tecnologia": [{"titulo": "Windows ganha atualização", "link": "c", "fonte": "Tecnoblog", "publicado": agora}],
+    }
+    monkeypatch.setattr(app.jornal, "coletar", lambda categoria: feeds.get(categoria, []))
+    monkeypatch.setattr(app.jornal, "buscar_tema", lambda tema: [])
+    r = app.agente.processar("notícias de TI e IA de hoje", canal="texto", falar=False)
+    assert r["caminho"] == "atalho"
+    assert r["texto"] == "Em IA: Novo modelo aberto supera rivais. Em TI: Windows ganha atualização."
+    jornal = next(h for h in app.hologramas.lista() if h["tipo"] == "jornal")
+    assert jornal["dados"]["aba"] == "ia"
+    assert app.agente.processar("o que saiu de inteligência artificial hoje", canal="texto", falar=False)["caminho"] == "atalho"
+    assert "ia" in app.jornal.fontes

@@ -92,11 +92,17 @@ _NAO_TOCAR = {"proxima", "anterior", "musica", "de novo", "novamente", "o som", 
 _JORNAL = re.compile(r"^((abre|mostra|abrir|mostrar|traz) (o )?)?(jornal|central de noticias)( de hoje)?$")
 _TEMA_ADD = re.compile(r"^(me )?(avisa|avise|alerta|notifica)( me)? (quando|se|assim que) (sair|tiver|aparecer|publicarem) "
                        r"(alguma |uma )?(noticia|novidade|novidades|noticias) (de|do|da|dos|das|sobre) (.+)$")
+_TI_IA = re.compile(r"^((abre|mostra|traz|quais (sao )?(as )?) ?(as )?)?(ultimas )?(noticias|novidades|manchetes) (de|da|do|sobre) "
+                    r"(ti|tecnologia|informatica)( e| ou) (de |da )?(ia|inteligencia artificial)( do dia| de hoje| hoje)?$|"
+                    r"^((abre|mostra|traz) (as )?)?(ultimas )?(noticias|novidades|manchetes) (de|da|do|sobre) "
+                    r"(ia|inteligencia artificial)( do dia| de hoje| hoje)?$|"
+                    r"^o que (saiu|aconteceu|rolou)( de novo)? (em|de|no mundo da|na) (ia|inteligencia artificial|ti|tecnologia)"
+                    r"( e (ia|inteligencia artificial|ti|tecnologia))?( hoje)?$")
 _TEMA_DEL = re.compile(r"^(para|pare|deixa) de (me )?(avisar|acompanhar|alertar) (sobre |de |do |da )?(.+)$")
 _NUMEROS = {"primeira": 1, "1": 1, "segunda": 2, "2": 2, "terceira": 3, "3": 3, "quarta": 4, "4": 4, "quinta": 5,
             "5": 5, "sexta": 6, "6": 6}
 _NOTICIA_N = re.compile(r"^(le|leia|ler|resume|salva|salvar|guarda) (a )?(primeira|segunda|terceira|quarta|quinta|sexta|[1-6]|"
-                        r"noticia (?:numero )?[1-6])( noticia)?( de| da| do| em)?( tecnologia| brasil| destaques| temas| salvas)?$")
+                        r"noticia (?:numero )?[1-6])( noticia)?( de| da| do| em)?( tecnologia| brasil| destaques| temas| salvas| ia)?$")
 _TAREFA_NOVA = re.compile(r"^(anota|anotar|adiciona (a |uma )?tarefa|cria (a |uma )?tarefa|nova tarefa|tarefa)(:| que| pra mim| para mim)? (?!na tela)(.+)$")
 _TAREFAS_VER = re.compile(r"^(quais (sao )?(as )?minhas tarefas|minhas tarefas|o que (eu )?tenho (pra|para) fazer( hoje)?|"
                           r"(mostra|abre) (o |as |meu |minhas )?(quadro|tarefas|kanban))$")
@@ -254,6 +260,8 @@ def _casar(t: str, ctx, original: str | None = None) -> Plano | None:
     # -- jornal
     if _JORNAL.match(t):
         return rodar("jornal", {"acao": "mostrar"})
+    if _TI_IA.match(t):
+        return rodar("jornal", {"acao": "ti_ia"})
     if m := _TEMA_ADD.match(t):
         return rodar("jornal", {"acao": "adicionar_tema", "tema": m.group(9)})
     if m := _TEMA_DEL.match(t):
