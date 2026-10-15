@@ -94,7 +94,8 @@ class AlertaSustentado:
         return False
 
     def minutos_acima(self, agora: float) -> int:
-        return max(1, round((agora - (self.acima_desde or agora)) / 60))
+        inicio = agora if self.acima_desde is None else self.acima_desde
+        return max(1, round((agora - inicio) / 60))
 
 
 def frase_chuva(minutos: int, tratamento: str) -> str:
