@@ -88,3 +88,18 @@ rotinas:
         dias: [dom]
     passos:
       - plano_semana: true
+
+# Personalidade e tradutor (extensão de comunicação):
+  #   personalidade: formal | amigavel | sarcastica
+  #   tradutor: inglês | espanhol | francês | alemão | italiano | japonês | chinês | coreano | russo | desligar
+  reuniao internacional:
+    frases: ["reunião internacional", "modo reunião em inglês"]
+    passos:
+      - personalidade: formal
+      - tradutor: inglês
+
+  fim da reuniao internacional:
+    frases: ["fim da reunião internacional", "acabou a reunião"]
+    passos:
+      - tradutor: desligar
+      - personalidade: amigavel

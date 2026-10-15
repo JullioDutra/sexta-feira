@@ -367,3 +367,97 @@ Os registros ficam em `dados/logs/sexta.log`.
 Para mexer no HUD (precisa do Node.js): `cd hud`, `npm install`, `npm run dev` (abre em `localhost:5173` com a Sexta-Feira rodando) e `npm run build` para gerar `hud/dist`.
 
 Comandos úteis: `iniciar.bat baixar`, `iniciar.bat diagnostico`, `iniciar.bat microfones`, `iniciar.bat testar-voz "olá"`, `iniciar.bat testar-ativacao`, `iniciar.bat pin`, `iniciar.bat dispositivos`, `iniciar.bat abrir`.
+
+## Personalidade e tradução
+
+### Personalidade
+
+A Sexta-Feira tem três jeitos de falar:
+
+- **Amigável** (padrão): o tom de sempre. Confiante, eficiente, leal e calorosa, com um humor leve e seco.
+- **Formal**: cortês e precisa, sem gírias nem piadas. Chama você de "senhor", ou pelo tratamento escolhido em **Ajustes** ("senhora", "doutora"…).
+- **Sarcástica**: humor seco e provocações leves, no estilo das IAs dos filmes. Nunca é grosseira, e avisos, erros, confirmações e assuntos de segurança, saúde ou dinheiro continuam diretos e sérios.
+
+Como trocar:
+
+- **Por voz:** "modo formal", "modo amigável", "modo sarcástico", "fica mais formal", "pode ser sarcástica", "muda a personalidade para amigável". Para saber qual está valendo: "qual sua personalidade?".
+- **No HUD:** Ajustes → **Personalidade**.
+- **Em protocolos:** a ação **Personalidade** (ex.: um protocolo de reunião que a deixa formal).
+
+A personalidade vale para as respostas da IA e para as respostas prontas ("Às ordens", "Tudo bem, cancelado", "Pois não?"). No modo formal, os lembretes, os avisos da agenda e os alertas do Jornal também passam a dizer "senhor". O prompt de sistema só muda quando você troca de personalidade, então o cache do cérebro continua valendo e ela segue rápida.
+
+Se você tiver um protocolo ou layout chamado "formal" (ou "sarcástico"…), "modo formal" continua rodando o seu protocolo ou layout. "Modo foco", "modo jogo", "modo escuro" e os outros modos não mudam.
+
+### Tradutor ao vivo (conversa por voz)
+
+Com o tradutor, a Sexta-Feira serve de intérprete numa conversa com alguém que fala outro idioma.
+
+- **Para ligar:** "modo tradutor para inglês", "traduz para espanhol o que eu falar", "tradução ao vivo em francês", "liga o tradutor em japonês". Sem dizer o idioma ("modo tradutor"), ela usa o último (inglês, na primeira vez).
+- **Idiomas:** inglês, espanhol, francês, alemão, italiano, japonês, chinês (mandarim), coreano e russo.
+- **Como funciona:** com o modo ligado, ela ouve sem precisar ser chamada. Cada fala é transcrita e ela identifica o idioma, só entre o português e o idioma escolhido. O que for dito em português sai falado no outro idioma, com uma voz nativa; o que for dito no outro idioma sai em português, com a voz dela. Ela só volta a ouvir depois de terminar de falar, para não traduzir a própria voz.
+- **Holograma "Tradução":** mostra a conversa, com o original e a tradução e a fala mais nova embaixo, e tem o botão **Parar tradutor**.
+- **Trocar de idioma sem sair:** "Sexta-Feira, modo tradutor para alemão".
+- **Para sair:** "para de traduzir", "sair do tradutor", "Sexta-Feira, chega", "Sexta-Feira, para", **Esc** no HUD do PC ou o botão do holograma. Com Ajustes ou outra janela aberta, o Esc só fecha a janela.
+- **Para falar com ela no meio da conversa, sem tradução:** chame "Sexta-Feira" enquanto ela fala, aperte o botão de falar (ou Espaço) antes de falar, ou diga só "Sexta-Feira" e espere o "Pois não?". A fala seguinte vai para ela, como fora do modo tradutor: "que horas são?", "fecha o Chrome"… Se ela pedir confirmação, basta responder "sim". Com um alarme tocando, "Sexta-Feira!" desliga o alarme.
+- Uma frase que só começa com a palavra ("sexta-feira de manhã") conta como conversa e é traduzida.
+
+### Traduzir a tela e o texto copiado
+
+- **Tela:** "traduz a tela", "traduz essa página", "traduz o que está na tela para inglês". Ela captura a tela e o modelo de visão transcreve e traduz o texto principal, para o português se você não disser o idioma. O original e a tradução aparecem no holograma "Tradução" e ela lê o começo. Isso precisa de um modelo com visão (`OLLAMA_MODELO_VISAO`) ou do cérebro Claude.
+- **Texto copiado:** "traduz o que eu copiei para inglês", "traduz o texto copiado". Ela traduz o texto da área de transferência (até 5.000 caracteres), mostra no holograma e já deixa a tradução copiada: é só colar. Sem idioma, vai para o português, ou para o inglês se o texto já estiver em português.
+
+### Em protocolos
+
+Duas ações novas:
+
+- **Personalidade:** `formal`, `amigável` ou `sarcástica`.
+- **Modo tradutor:** um idioma (liga) ou `desligar`.
+
+```yaml
+  reuniao internacional:
+    frases: ["reunião internacional", "reunião em inglês"]
+    passos:
+      - personalidade: formal
+      - tradutor: inglês
+```
+
+### Privacidade
+
+- A fala é transcrita no próprio PC, pelo Whisper. Nada é gravado em disco: a conversa traduzida fica só na memória (as últimas 40 falas, para o holograma) e é apagada quando o modo tradutor é ligado de novo.
+- A tradução usa o cérebro configurado. Com o Ollama, tudo fica no PC. Com o Claude (`CEREBRO=claude`), as falas, o texto copiado e a captura da tela vão para a API da Anthropic.
+- As vozes de cada idioma vêm do edge-tts, um serviço online da Microsoft: o texto traduzido é enviado para gerar o áudio, como já acontece com a voz dela.
+- Com o modo tradutor ligado, ela ouve tudo o que é dito perto do microfone sem a palavra de ativação, inclusive outras pessoas. Desligue quando a conversa acabar.
+
+### Requisitos e limitações (Windows)
+
+- **Microfone:** o modo tradutor não liga sem ele. Use **fones de ouvido** se puder. Sem fones, o microfone capta a voz dela: ela espera terminar de falar antes de ouvir, mas um "sexta-feira" dito por ela (ao traduzir "Friday") pode ser confundido com o próprio nome.
+- **Internet:** necessária para as vozes nativas (edge-tts). Sem internet, ou com `VOZ_MOTOR=windows`, ela usa as vozes instaladas no Windows. Instale os idiomas de fala em **Configurações → Hora e idioma → Fala**. Sem uma voz do idioma, a frase sai com a voz padrão do sistema; o Diagnóstico avisa.
+- **Whisper multilíngue:** use `WHISPER_MODELO=small`, `medium` ou outro multilíngue. Os modelos terminados em `.en` não detectam idioma.
+- **Frases muito curtas** ("ok", "sim") às vezes têm o idioma detectado errado. Uma frase mais completa resolve. A tradução do que é falado usa o cérebro rápido (`OLLAMA_MODELO_RAPIDO` ou `CLAUDE_MODELO_RAPIDO`), para responder logo.
+- **Uma conversa por vez:** sempre entre o português e um outro idioma.
+
+## Memória dos documentos
+
+Pergunte sobre os seus próprios arquivos — contratos, apólices, boletos, laudos, manuais — e ela responde com base no que está escrito neles, citando o arquivo e a página.
+
+- **Escolha as pastas:** em **Ajustes → Memória dos documentos** (caminho completo ou "Documentos/Contratos") ou por voz: "usa a pasta Documentos/Contratos como memória", "adiciona a pasta Contratos na memória dos documentos", "tira a pasta Contratos da memória". Também dá para listar pastas em `DOCUMENTOS_PASTAS` no `.env` (separadas por vírgula; essas só saem editando o `.env`). Por segurança, ela só aceita pastas que existem dentro da sua pasta de usuário (menos AppData e pastas ocultas como `.ssh`) ou em outros discos e na rede — nunca a pasta do Windows, de programas, um disco inteiro ou a pasta de usuário inteira.
+- **O que ela lê:** PDF (página a página), Word `.docx` (parágrafos e tabelas), `.txt`, `.md` e `.csv`. O limite é de 50 MB e 1000 páginas por arquivo e 20 mil arquivos no total. Ela pula pastas ocultas, de sistema e de programas (`node_modules`, `venv`...), atalhos e links e os temporários do Office. A leitura roda em segundo plano: começa uns 15 segundos depois que ela sobe, se repete a cada 30 minutos só no que mudou e logo depois que você muda as pastas. "Reindexa os meus documentos" ou o botão **Reindexar agora** pedem uma leitura na hora.
+- **Pergunte:** "o que diz meu contrato sobre multa?", "no contrato de aluguel, qual o prazo de aviso prévio?", "procura nos meus documentos quanto paguei de IPTU", "pergunta pros meus documentos qual o valor do condomínio". Na voz a resposta tem 2 ou 3 frases; no HUD e no celular, um pouco mais. Se os documentos não falam do assunto, ela diz que não encontrou — não completa com o que "acha". Outras formas de perguntar também funcionam pela IA ("quanto ficou o seguro do carro segundo a apólice?"); diga também "quantos documentos estão na memória?".
+- **Holograma Documentos** (barra lateral ou "abre a memória dos documentos"): mostra a resposta, os cartões das fontes (arquivo, página e o trecho com as palavras da pergunta em destaque) e um campo para perguntar de novo. No PC, **Abrir** abre o arquivo no programa padrão do Windows; no celular o holograma aparece sem esse botão.
+- **Ajustes → Memória dos documentos:** mostra as pastas (adicionar e remover; as do `.env` aparecem marcadas), o botão **Reindexar agora**, quantos documentos e trechos estão na memória, a última leitura e a lista dos arquivos que não puderam ser lidos (PDF com senha, PDF escaneado sem texto, arquivo grande demais, aberto em outro programa, só na nuvem...).
+- **Limitações:**
+  - PDFs escaneados (só imagem) não são lidos, porque não há OCR.
+  - PDF com senha para abrir fica de fora; PDF que só restringe impressão ou cópia é lido normalmente.
+  - `.doc` (Word antigo), `.xlsx` e `.pptx` não entram.
+  - Arquivos "só online" do OneDrive não são baixados: marque a pasta como **Manter sempre neste dispositivo**.
+  - Um disco externo desligado mantém o índice até voltar.
+  - O índice usa o SQLite com busca FTS5, que já vem no Python oficial do python.org.
+  - Abrir o arquivo pelo holograma só funciona no Windows.
+
+Na tabela de **Configuração (`.env`)**:
+
+| `DOCUMENTOS_PASTAS` | pastas da memória dos documentos, separadas por vírgula (somam-se às escolhidas em Ajustes) |
+
+Em **Privacidade**, na lista do que sai do PC:
+
+- **memória dos documentos** — os arquivos são lidos e indexados só no seu PC (`dados/documentos.db`). A cada pergunta, apenas a pergunta e os trechos escolhidos (até 6, de ~900 caracteres) vão para o cérebro: para a API da Anthropic se você usa o Claude; com o Ollama, nada sai do PC. Uma pasta tirada da memória deixa de aparecer nas respostas na hora. Para apagar o índice, apague `dados/documentos.db` (ele é refeito na próxima leitura).
