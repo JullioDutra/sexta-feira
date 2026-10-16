@@ -337,3 +337,76 @@ def motivos_das_importacoes(caps: dict[str, list[str]], funcoes: set[str], strin
         motivos.append(Motivo("ransomware", "cifra arquivos, percorre pastas e cita resgate ou cópias de sombra "
                                             "(padrão de ransomware)", 4, sorted(cripto), "ransomware"))
     return motivos
+
+
+# -- MITRE ATT&CK ----------------------------------------------------------------------------------------
+# Cada achado -> técnicas do ATT&CK (https://attack.mitre.org), o vocabulário comum de quem trabalha com
+# segurança: deixa os relatórios comparáveis entre análises, agentes e ferramentas externas.
+ATTACK: dict[str, tuple[tuple[str, str], ...]] = {
+    "defender": (("T1562.001", "Impair Defenses: Disable or Modify Tools"),
+                 ("T1562.004", "Impair Defenses: Disable or Modify System Firewall")),
+    "amsi": (("T1562.001", "Impair Defenses: Disable or Modify Tools"),),
+    "copias_sombra": (("T1490", "Inhibit System Recovery"),),
+    "persistencia": (("T1547.001", "Boot or Logon Autostart: Registry Run Keys / Startup Folder"),
+                     ("T1053.005", "Scheduled Task/Job: Scheduled Task"),
+                     ("T1543.003", "Create or Modify System Process: Windows Service")),
+    "credenciais": (("T1555.003", "Credentials from Web Browsers"),),
+    "dpapi_navegador": (("T1555.003", "Credentials from Web Browsers"),),
+    "lolbin": (("T1218", "System Binary Proxy Execution"),),
+    "conexao_reversa": (("T1059", "Command and Scripting Interpreter"), ("T1071", "Application Layer Protocol")),
+    "usuario_admin": (("T1136.001", "Create Account: Local Account"), ("T1098", "Account Manipulation")),
+    "apagar_rastros": (("T1070.001", "Indicator Removal: Clear Windows Event Logs"),),
+    "uac": (("T1548.002", "Abuse Elevation Control Mechanism: Bypass UAC"),),
+    "oculto": (("T1564.003", "Hide Artifacts: Hidden Window"),),
+    "download_execucao": (("T1105", "Ingress Tool Transfer"), ("T1059", "Command and Scripting Interpreter")),
+    "download": (("T1105", "Ingress Tool Transfer"),),
+    "download_escondido": (("T1105", "Ingress Tool Transfer"),),
+    "baixa_arquivos": (("T1105", "Ingress Tool Transfer"),),
+    "powershell_base64": (("T1059.001", "Command and Scripting Interpreter: PowerShell"),
+                          ("T1027", "Obfuscated Files or Information")),
+    "ofuscacao": (("T1027", "Obfuscated Files or Information"),),
+    "bloco_codificado": (("T1027", "Obfuscated Files or Information"),),
+    "base64": (("T1140", "Deobfuscate/Decode Files or Information"),),
+    "compactado": (("T1027.002", "Obfuscated Files or Information: Software Packing"),),
+    "sem_importacoes": (("T1027.002", "Obfuscated Files or Information: Software Packing"),),
+    "injecao": (("T1055", "Process Injection"),),
+    "teclado": (("T1056.001", "Input Capture: Keylogging"),),
+    "ransomware": (("T1486", "Data Encrypted for Impact"), ("T1490", "Inhibit System Recovery")),
+    "macros": (("T1204.002", "User Execution: Malicious File"), ("T1059.005", "Command and Scripting Interpreter: Visual Basic")),
+    "dupla_extensao": (("T1036.007", "Masquerading: Double File Extension"),),
+    "dupla_extensao_interna": (("T1036.007", "Masquerading: Double File Extension"),),
+    "nome_disfarcado": (("T1036.002", "Masquerading: Right-to-Left Override"),),
+    "extensao_falsa": (("T1036.008", "Masquerading: Masquerade File Type"),),
+    "atalho_comando": (("T1204.002", "User Execution: Malicious File"),),
+    "imagem_disco": (("T1553.005", "Subvert Trust Controls: Mark-of-the-Web Bypass"),),
+    "zip_com_senha": (("T1027.013", "Obfuscated Files or Information: Encrypted/Encoded File"),),
+    "pdf_ativo": (("T1204.002", "User Execution: Malicious File"),),
+    "rtf_objeto": (("T1203", "Exploitation for Client Execution"),),
+    "assinatura_alterada": (("T1553.002", "Subvert Trust Controls: Code Signing"),),
+}
+
+
+def mapear_attack(motivos: list[Motivo]) -> list[dict]:
+    """Técnicas do ATT&CK dos achados que pesam a favor do risco, sem repetir, com os achados de origem."""
+    saida: dict[str, dict] = {}
+    for m in motivos:
+        if m.peso <= 0:
+            continue
+        for tid, nome in ATTACK.get(m.id, ()):
+            item = saida.setdefault(tid, {"id": tid, "nome": nome, "achados": [],
+                                          "url": f"https://attack.mitre.org/techniques/{tid.replace('.', '/')}/"})
+            if m.id not in item["achados"]:
+                item["achados"].append(m.id)
+    return sorted(saida.values(), key=lambda t: t["id"])
+
+
+def indicadores(relatorio: dict) -> dict:
+    """IOCs (indicadores de comprometimento) para procurar em outros PCs, no firewall ou no VirusTotal."""
+    strings = relatorio.get("strings") or {}
+    urls = list(strings.get("urls") or [])
+    dominios = sorted({re.sub(r"^[a-z]+://", "", u, flags=re.I).split("/")[0].split(":")[0].lower() for u in urls} - {""})
+    return {
+        "sha256": relatorio.get("sha256", ""), "md5": relatorio.get("md5", ""), "sha1": relatorio.get("sha1", ""),
+        "urls": urls[:MAX_STRINGS], "dominios": dominios[:MAX_STRINGS], "ips": list(strings.get("ips") or [])[:MAX_STRINGS],
+        "registro": list(strings.get("registro") or [])[:MAX_STRINGS],
+    }

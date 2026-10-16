@@ -19,6 +19,7 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -179,13 +180,7 @@ class Agente:
             tipo = "claude" if cfg.usa_claude() else "ollama"
         else:
             tipo = "livre" if cfg.cerebro == "livre" else "claude" if cfg.usa_claude() else "ollama"
-            self.ollama = criar_cerebro(cfg, tipo)
-            reserva = getattr(cfg, "cerebro_reserva", "")
-            if reserva in ("livre", "ollama") and reserva != tipo:
-                from .reserva import CerebroComReserva
-
-                rapido_reserva = cfg.livre_modelo_rapido if reserva == "livre" else cfg.ollama_modelo_rapido
-                self.ollama = CerebroComReserva(self.ollama, criar_cerebro(cfg, reserva), rapido_reserva or "")
+            self.ollama = montar_cadeia(cfg, tipo)
         self.nome_cerebro = {"claude": "Claude", "livre": "FreeLLMAPI", "ollama": "Ollama"}[tipo]
         self.modelo_rapido = {"claude": cfg.claude_modelo_rapido, "livre": getattr(cfg, "livre_modelo_rapido", ""),
                               "ollama": getattr(cfg, "ollama_modelo_rapido", "")}[tipo] or ""
@@ -481,18 +476,51 @@ class Agente:
         )
 
 
-def criar_cerebro(cfg, tipo: str):
+def reservas_configuradas(cfg, tipo: str) -> list[str]:
+    """``CEREBRO_RESERVA=livre,ollama`` → ["livre", "ollama"], na ordem, sem o principal nem repetidos."""
+    saida: list[str] = []
+    for nome in str(getattr(cfg, "cerebro_reserva", "") or "").replace(";", ",").split(","):
+        nome = nome.strip().lower()
+        if nome in ("claude", "livre", "ollama") and nome != tipo and nome not in saida:
+            if nome == "claude" and not os.environ.get("ANTHROPIC_API_KEY", "").strip():
+                continue
+            saida.append(nome)
+    return saida
+
+
+def montar_cadeia(cfg, tipo: str):
+    """Principal + reservas em cadeia: se um falha antes de responder, o próximo assume (Claude → FreeLLMAPI →
+    Ollama, por exemplo). Os agentes autônomos usam o mesmo cérebro, então a redundância vale para todos."""
+    reservas = reservas_configuradas(cfg, tipo)
+    # com reserva, o SDK não insiste sozinho num provedor com limite ou fora do ar: a troca é imediata
+    cadeia = criar_cerebro(cfg, tipo, tentativas=0 if reservas else 2)
+    if not reservas:
+        return cadeia
+    from .reserva import CerebroComReserva
+
+    rapidos = {"claude": cfg.claude_modelo_rapido, "livre": cfg.livre_modelo_rapido, "ollama": cfg.ollama_modelo_rapido}
+    # monta de trás para frente: CerebroComReserva(principal, CerebroComReserva(livre, ollama))
+    resto = criar_cerebro(cfg, reservas[-1])
+    for i in range(len(reservas) - 2, -1, -1):
+        resto = CerebroComReserva(criar_cerebro(cfg, reservas[i], tentativas=0), resto,
+                                  rapidos.get(reservas[i + 1]) or "")
+    log.info("Cérebro %s com reserva: %s", tipo, " → ".join(reservas))
+    return CerebroComReserva(cadeia, resto, rapidos.get(reservas[0]) or "")
+
+
+def criar_cerebro(cfg, tipo: str, tentativas: int = 2):
     """Cliente do modelo: ``claude`` (API da Anthropic), ``livre`` (FreeLLMAPI ou outra API no formato do
     Claude) ou ``ollama`` (local)."""
     if tipo == "claude":
         from .claude import ClienteClaude
 
-        return ClienteClaude(cfg.claude_modelo, esforco_voz=cfg.claude_esforco_voz, esforco_texto=cfg.claude_esforco_texto)
+        return ClienteClaude(cfg.claude_modelo, esforco_voz=cfg.claude_esforco_voz, esforco_texto=cfg.claude_esforco_texto,
+                             tentativas=tentativas)
     if tipo == "livre":
         from .claude import ClienteClaude
 
         return ClienteClaude(cfg.livre_modelo, chave=cfg.livre_chave or "sem-chave", url=cfg.livre_url,
-                             nome="FreeLLMAPI")
+                             nome="FreeLLMAPI", tentativas=tentativas)
     return ClienteOllama(
         cfg.ollama_url, cfg.ollama_modelo, pensar=cfg.ollama_pensar, contexto=cfg.ollama_contexto,
         temperatura=cfg.ollama_temperatura, manter_carregado=cfg.ollama_manter_carregado,

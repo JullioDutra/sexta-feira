@@ -75,7 +75,7 @@ class Config:
     livre_url: str = "http://localhost:3001"
     livre_chave: str = ""
     livre_modelo: str = "auto"
-    livre_modelo_rapido: str = ""
+    livre_modelo_rapido: str = "auto:fast"  # roteamento do FreeLLMAPI pelo provedor mais rápido do momento
     cerebro_reserva: str = ""  # "livre" ou "ollama": assume quando o principal falha
 
     # Cérebro local (Ollama)
@@ -174,7 +174,7 @@ class Config:
             livre_url=_env_str("LIVRE_URL", cls.livre_url).rstrip("/"),
             livre_chave=_env_str("LIVRE_CHAVE"),
             livre_modelo=_env_str("LIVRE_MODELO", cls.livre_modelo),
-            livre_modelo_rapido=_env_str("LIVRE_MODELO_RAPIDO"),
+            livre_modelo_rapido=_env_str("LIVRE_MODELO_RAPIDO", cls.livre_modelo_rapido),
             cerebro_reserva=_env_str("CEREBRO_RESERVA").lower(),
             ollama_url=_env_str("OLLAMA_URL", cls.ollama_url).rstrip("/"),
             ollama_modelo=_env_str("OLLAMA_MODELO", cls.ollama_modelo),

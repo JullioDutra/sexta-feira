@@ -6,6 +6,7 @@ Em português para os comandos; com detecção de idioma para o modo tradutor.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections.abc import Sequence
 
@@ -14,7 +15,8 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 # Dica de vocabulário: deixa o Whisper mais certeiro com nomes de apps e comandos
-DICA_PADRAO = ("Comandos para a assistente Sexta-Feira em português do Brasil: abre o Spotify, fecha o Chrome, "
+# (o idioma já vai fixo em "pt": "em português do Brasil" na dica fazia o Whisper repetir a frase em ruído)
+DICA_PADRAO = ("Comandos para a assistente Sexta-Feira: abre o Spotify, fecha o Chrome, "
                "coloca o VS Code na esquerda, volume 30, brilho 70, liga o Wi-Fi, modo escuro, analisa a tela, "
                "acha o PDF do contrato, organiza os Downloads.")
 
@@ -25,6 +27,8 @@ ALUCINACOES = (
     "comandos para a assistente",  # eco da dica de vocabulário
     "thanks for watching", "thank you for watching", "ご視聴ありがとうございました",
 )
+# eco da dica antiga ("...em português do Brasil"), sozinho ou grudado no começo do pedido
+_ECO_IDIOMA = re.compile(r"^\s*(em|no) portugu[eê]s( do brasil)?\s*[.,!:]?\s*", re.IGNORECASE)
 
 
 class Transcritor:
@@ -84,6 +88,7 @@ class Transcritor:
                 segmentos, info = self._decodificar(audio, _mais_provavel(info.all_language_probs, candidatos), dica)
             textos = [seg.text.strip() for seg in segmentos if not (seg.no_speech_prob > 0.75 and seg.avg_logprob < -0.8)]
         texto = " ".join(t for t in textos if t).strip()
+        texto = _ECO_IDIOMA.sub("", texto).strip()
         if any(a in texto.lower() for a in ALUCINACOES):
             log.debug("Transcrição descartada (alucinação): %s", texto)
             return "", info.language

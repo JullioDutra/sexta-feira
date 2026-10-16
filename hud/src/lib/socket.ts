@@ -90,6 +90,14 @@ class Conexao {
     this.enviar({ tipo: "maos", ligar });
   }
 
+  /** Estado das mãos que veio do servidor. Ligado: este HUD se inscreve para receber os pontos (ligar de
+   * novo não muda nada lá). Desligado: só lembra, sem mandar de volta — ecoar o "desligar" fazia vários
+   * HUDs abertos ligarem e desligarem o rastreamento sem parar. */
+  lembrarMaos(ligar: boolean): void {
+    if (ligar && !this.querMaos) this.enviar({ tipo: "maos", ligar: true });
+    this.querMaos = ligar;
+  }
+
   ouvir(funcao: Ouvinte): () => void {
     this.ouvintes.add(funcao);
     return () => this.ouvintes.delete(funcao);

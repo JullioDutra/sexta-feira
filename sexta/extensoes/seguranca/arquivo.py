@@ -500,6 +500,8 @@ def analisar(caminho: Path, *, assinatura: Callable[[Path], dict] | None = None,
         "strings": strings, "detalhes": detalhes, "tecnicas": tecnicas, "limites": limites, "sugestoes": sugestoes,
         "quando": (agora or datetime.now()).isoformat(timespec="seconds"),
     }
+    relatorio["attack"] = padroes.mapear_attack(motivos)
+    relatorio["indicadores"] = padroes.indicadores(relatorio)
     relatorio["veredito"] = veredito(relatorio)
     return relatorio
 
@@ -564,5 +566,7 @@ def resumo_curto(r: dict) -> dict:
         "motivos": [f"{m['texto']} (peso {m['peso']})" for m in r["motivos"]][:10],
         "capacidades": list(r.get("capacidades_rotulos", {}).values()),
         "urls": r["strings"]["urls"][:8], "ips": r["strings"]["ips"][:8], "limites": r["limites"][:2],
+        "attack": [f"{t['id']} {t['nome']}" for t in r.get("attack", [])][:10],
+        "dominios": (r.get("indicadores") or {}).get("dominios", [])[:8],
         "sugestoes": r.get("sugestoes", []),
     }

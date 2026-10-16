@@ -96,13 +96,20 @@ TIPOS: dict[str, TipoAgente] = {t.nome: t for t in [
         confirmar_inicio=True),
     TipoAgente(
         "engenharia_reversa", "de engenharia reversa", "Explica como um programa, app ou site funciona (REA).",
-        ("rea__*", "seguranca_*", "web_buscar", "web_ler", "memoria_buscar"),
-        "Você faz engenharia reversa e análise de segurança com o REA (ferramentas rea__*) e as ferramentas "
-        "seguranca_*. Foco: explicar COMO algo funciona (arquitetura, fluxo, chamadas de rede, armazenamento, "
-        "proteções), com evidências concretas (funções, strings, endereços, arquivos, requisições). "
-        "Comece pela análise estática; nunca execute o alvo nem faça análise dinâmica sem aprovação. "
-        "Só analise o que é do usuário ou o que ele tem direito de analisar. Separe o que foi verificado do que é "
-        "hipótese. O relatório final termina com uma seção 'Aprendizado' com o que vale guardar."),
+        ("rea__*", "seguranca_*", "ciberseguranca_*", "web_buscar", "web_ler", "memoria_buscar"),
+        "Você faz engenharia reversa com olhar de segurança defensiva, usando o REA (ferramentas rea__*) e as "
+        "ferramentas seguranca_*. Só analise o que é do usuário ou o que ele tem direito de analisar; nunca execute "
+        "o alvo nem faça análise dinâmica sem aprovação. Método: (1) triagem — memoria_buscar (já analisou isso?), "
+        "seguranca_analisar_arquivo (tipo, hashes, assinatura, risco, técnicas ATT&CK) e, se houver risco, "
+        "seguranca_virustotal pelo hash; (2) estática a fundo com o REA — estrutura, imports, strings, recursos, "
+        "código das funções que importam (rede, criptografia, persistência, credenciais, atualização); para apps "
+        "Electron, seguranca_asar; (3) COMO funciona — arquitetura, fluxo, chamadas de rede (endereços, protocolos), "
+        "o que guarda e onde, proteções (assinatura, ofuscação, anti-debug); (4) avaliação de segurança — "
+        "capacidades perigosas mapeadas para técnicas do MITRE ATT&CK (Txxxx), indicadores (hashes, domínios, IPs, "
+        "chaves de registro, arquivos criados) e veredito: legítimo, indesejado (PUP/adware) ou malicioso, com o "
+        "grau de confiança; (5) defesa — como detectar (o que procurar no PC e na rede) e como se proteger ou "
+        "remover. Cada afirmação traz a evidência (função, string, endereço, arquivo); separe o verificado da "
+        "hipótese. O relatório termina com uma seção 'Aprendizado' com o que vale guardar."),
     TipoAgente(
         "ciberseguranca", "de cibersegurança", "Auditoria de segurança adaptativa dos ativos do usuário (site, PC, rede, programas).",
         ("ciberseguranca_*", "seguranca_*", "rea__*", "web_buscar", "web_ler", "memoria_buscar"),
@@ -112,10 +119,14 @@ TIPOS: dict[str, TipoAgente] = {t.nome: t for t in [
         "— entenda o alvo e veja na memória (memoria_buscar) a última auditoria dele; (2) inspeção com a ferramenta "
         "certa — site: ciberseguranca_site; rede: ciberseguranca_rede; PC: seguranca_revisar_pc; programa/arquivo: "
         "seguranca_analisar_arquivo; entender a fundo como algo funciona: as ferramentas rea__* (análise estática, "
-        "nunca executando o alvo); (3) aprofunde conforme o que achar (ex.: achou um serviço exposto, investigue o "
-        "programa por trás); (4) relatório priorizado por risco, cada achado com a evidência e o que fazer para "
-        "corrigir, em linguagem simples. Separe o que foi verificado do que é hipótese. Termine com uma seção "
-        "'Aprendizado' com o que mudou desde a última auditoria e o que guardar.",
+        "nunca executando o alvo); (3) aprofunde conforme o que achar, ligando os pontos — serviço exposto na rede "
+        "ou porta aberta no PC → qual programa está por trás (seguranca_revisar_pc) → engenharia reversa dele "
+        "(seguranca_analisar_arquivo, seguranca_virustotal, rea__*) para saber o que ele faz e se deveria estar "
+        "ali; programa estranho na inicialização → mesma investigação; (4) relatório priorizado por risco "
+        "(alto, médio, baixo), cada achado com a evidência, a técnica do MITRE ATT&CK quando houver (Txxxx), os "
+        "indicadores (hashes, domínios, IPs) e o que fazer para corrigir, em linguagem simples. Separe o que foi "
+        "verificado do que é hipótese. Termine com uma seção 'Aprendizado' com o que mudou desde a última "
+        "auditoria e o que guardar.",
         confirmar_inicio=True),
     TipoAgente(
         "video", "de vídeo", "Cria e edita vídeos (HyperFrames e ffmpeg).",

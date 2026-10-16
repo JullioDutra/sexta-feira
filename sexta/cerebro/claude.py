@@ -29,7 +29,8 @@ BETA_FALLBACK = "server-side-fallback-2026-07-01"
 
 class ClienteClaude:
     def __init__(self, modelo: str = MODELO_PADRAO, *, chave: str = "", esforco_voz: str = "low",
-                 esforco_texto: str = "medium", cliente=None, url: str = "", nome: str = "Claude") -> None:
+                 esforco_texto: str = "medium", cliente=None, url: str = "", nome: str = "Claude",
+                 tentativas: int = 2) -> None:
         self.modelo = modelo or MODELO_PADRAO
         self.nome = nome
         self.esforco_voz = esforco_voz
@@ -44,7 +45,7 @@ class ClienteClaude:
             import anthropic
 
             # sem chave explícita, o SDK lê ANTHROPIC_API_KEY (ou o login do `ant`)
-            self._cliente = anthropic.Anthropic(api_key=chave or None, base_url=url or None, max_retries=2,
+            self._cliente = anthropic.Anthropic(api_key=chave or None, base_url=url or None, max_retries=tentativas,
                                                 timeout=anthropic.Timeout(60.0, connect=5.0))
 
     # ------------------------------------------------------------------

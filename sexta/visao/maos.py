@@ -21,6 +21,7 @@ class Maos:
         self.app = app
         self._thread: threading.Thread | None = None
         self._ligado = threading.Event()
+        self._trava = threading.Lock()
         self.ultimas: list[dict] = []
         self.fps = 0.0
 
@@ -34,11 +35,17 @@ class Maos:
         if not self.disponivel():
             self.app.estado.aviso("maos", "Modelo de mãos não encontrado. Rode: python -m sexta baixar")
             return False
-        if self._ligado.is_set():
-            return True
-        self._ligado.set()
-        self._thread = threading.Thread(target=self._laco, name="maos", daemon=True)
-        self._thread.start()
+        with self._trava:
+            if self._ligado.is_set():
+                return True
+            # um liga/desliga rápido não pode deixar dois detectores disputando a CPU e a câmera
+            anterior = self._thread
+            if anterior is not None and anterior.is_alive():
+                anterior.join(timeout=3)
+            self._ligado = threading.Event()
+            self._ligado.set()
+            self._thread = threading.Thread(target=self._laco, args=(self._ligado,), name="maos", daemon=True)
+            self._thread.start()
         self.app.estado.definir_maos(True)
         return True
 
@@ -48,7 +55,7 @@ class Maos:
         self._ligado.clear()
         self.app.estado.definir_maos(False)
 
-    def _laco(self) -> None:
+    def _laco(self, ligado: threading.Event) -> None:
         import cv2
         import mediapipe as mp
         from mediapipe.tasks import python as mpt
@@ -68,7 +75,7 @@ class Maos:
         except Exception as erro:  # noqa: BLE001
             log.error("Não consegui iniciar o rastreamento de mãos: %s", erro)
             self.app.estado.aviso("maos", f"Rastreamento de mãos indisponível: {erro}")
-            self._ligado.clear()
+            ligado.clear()
             self.app.estado.definir_maos(False)
             return
 
@@ -78,7 +85,7 @@ class Maos:
         seq, ultimo_ts, contador, inicio_fps = 0, 0, 0, time.monotonic()
         vazio_enviado = False
         try:
-            while self._ligado.is_set():
+            while ligado.is_set():
                 quadro, seq = camera.esperar_quadro(seq, 1.0)
                 if quadro is None:
                     continue

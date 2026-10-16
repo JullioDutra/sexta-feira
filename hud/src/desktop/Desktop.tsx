@@ -28,7 +28,7 @@ export default function Desktop() {
 
   // quando a Sexta liga os gestos (por voz), este HUD passa a receber os pontos das mãos
   useEffect(() => {
-    conexao.definirMaos(maosLigadas);
+    conexao.lembrarMaos(maosLigadas);
   }, [maosLigadas]);
 
   if (semAcesso) return <SemAcesso />;

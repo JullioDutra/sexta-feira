@@ -74,7 +74,7 @@ Na primeira vez, o Windows pergunta se o Python pode usar a rede: **permita em "
 
 **Cérebro grátis (FreeLLMAPI):** o [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) junta os planos gratuitos de dezenas de provedores atrás de um endereço só, no formato da API do Claude. Rode-o no PC (veja o README dele; o painel fica em http://localhost:3001), cadastre as chaves dos provedores e copie a chave unificada para `LIVRE_CHAVE`. Depois:
 - `CEREBRO=livre` usa só ele (grátis; qualidade e velocidade variam conforme o provedor do momento);
-- ou, melhor, mantenha o Claude e ponha `CEREBRO_RESERVA=livre`: quando o Claude falhar (sem crédito, limite, rede), o FreeLLMAPI assume por alguns minutos e ela não fica muda. `CEREBRO_RESERVA=ollama` também funciona, para respostas sem ferramentas.
+- ou, melhor, mantenha o Claude e ponha `CEREBRO_RESERVA=livre,ollama`: quando o Claude falhar (sem crédito, limite, rede), o FreeLLMAPI assume por alguns minutos; se ele também falhar, o Ollama do PC responde, e ela nunca fica muda. A cadeia vale para a conversa e para todos os agentes autônomos. Com reserva configurada, um limite de uso troca de cérebro na hora, sem ficar tentando de novo. Pedidos curtos no FreeLLMAPI usam `auto:fast` (o provedor mais rápido do momento).
 
 ## Velocidade: resposta na hora, pensamento só quando precisa
 

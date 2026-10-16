@@ -323,10 +323,11 @@ class SextaFeira:
             self.desbloquear_por_rosto(automatico=True)
 
     def _aquecer_cerebro(self) -> None:
-        if self.com_voz:  # o "deixa eu ver" dos pedidos complexos toca em milissegundos
+        if self.com_voz:  # o "deixa eu ver" e as respostas sociais ("tudo bem?") tocam em milissegundos
+            from .cerebro import personalidade
             from .voz.fala import RECONHECIMENTOS
 
-            self.fala.preaquecer(RECONHECIMENTOS)
+            self.fala.preaquecer(RECONHECIMENTOS + personalidade.frases_prontas(self.prefs))
         self.agente.aquecer()
         verificar_memoria = getattr(self.agente.ollama, "uso_de_memoria", None)
         if verificar_memoria:  # Ollama: avisa se o modelo não coube na placa de vídeo

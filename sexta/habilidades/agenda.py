@@ -46,6 +46,11 @@ class Agenda:
             try:
                 r = self.http.get(url.replace("webcal://", "https://"))
                 r.raise_for_status()
+                if not r.content.lstrip(b"\xef\xbb\xbf \t\r\n")[:15].upper().startswith(b"BEGIN:VCALENDAR"):
+                    # ex.: o Google devolve a página de login quando o link não é o "endereço secreto iCal"
+                    log.warning("Agenda (%s…) não devolveu um calendário iCal. Use o endereço secreto no formato "
+                                "iCal em AGENDA_ICS.", url[:40])
+                    continue
                 dados.append(r.content)
             except httpx.HTTPError as erro:
                 log.warning("Agenda indisponível (%s): %s", url[:40], erro)
@@ -66,7 +71,7 @@ class Agenda:
                 cal = icalendar.Calendar.from_ical(bruto)
                 ocorrencias = recurring_ical_events.of(cal).between(inicio, fim)
             except Exception as erro:  # noqa: BLE001 - um calendário com defeito não derruba os outros
-                log.warning("Não consegui ler um calendário: %s", erro)
+                log.warning("Não consegui ler um calendário: %s", str(erro)[:200])
                 continue
             for ev in ocorrencias:
                 if str(ev.get("STATUS", "")).upper() == "CANCELLED" or str(ev.get("TRANSP", "")).upper() == "TRANSPARENT":

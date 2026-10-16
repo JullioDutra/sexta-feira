@@ -37,6 +37,27 @@ _BLOQUEAR = re.compile(r"^(bloqueia|bloquear|trava|travar)( o)? (computador|pc|t
 _LIMPAR = re.compile(r"^(fecha|fechar|limpa|limpar|some com|esconde)( os| todos os)? (hologramas|a tela|paineis)$")
 _CANCELAR = re.compile(r"^(cancela|cancelar|esquece|deixa pra la|deixa|para|pare|chega|silencio|nada nao|nada)$")
 _OBRIGADO = re.compile(r"^(obrigad[oa]|valeu|brigad[oa]|muito obrigad[oa]|obrigado sexta feira|valeu sexta feira)$")
+# -- conversa social: resposta pronta na hora, sem IA ------------------------------------------
+_VOCATIVO = r"(?: (?:sexta feira|sexta|amiga|querida))?"
+_OI = r"(?:oi|ola|opa|e ai|ei|hey|salve|fala|bom dia|boa tarde|boa noite)"
+_TUDO_BEM = re.compile(
+    r"^(?:" + _OI + _VOCATIVO + r" )?(?:e )?(?:"
+    r"tudo (?:bem|bom|certo|tranquilo|joia|ok|em ordem|beleza)(?: (?:ai|por ai|com voce|contigo))?|"
+    r"(?:e )?(?:como (?:e que )?)(?:voce )?(?:esta|ta|vai|anda|tem passado)(?: voce| hoje| ai)?|"
+    r"como (?:vai|esta|ta|andam?) (?:a vida|tudo|as coisas)(?: por ai)?|"
+    r"beleza|blz|de boa|suave|firmeza)" + _VOCATIVO + r"(?: e (?:voce|com voce))?$")
+_SAUDACAO = re.compile(r"^(?:" + _OI + r"(?: " + _OI + r")?)" + _VOCATIVO + r"$")
+_PRESENTE = re.compile(r"^(?:(?:voce )?(?:ta|esta) ai|(?:voce )?(?:ta|esta) (?:me )?(?:ouvindo|escutando)(?: (?:me|isso))?|"
+                       r"me (?:ouve|escuta)|alo|alo alo|acordou|ta acordada|esta acordada)" + _VOCATIVO + r"$")
+_QUEM_SOU = re.compile(r"^(?:quem e voce|quem e tu|qual (?:e )?(?:o )?seu nome|como (?:voce )?se chama|se apresenta|"
+                       r"o que voce e)" + _VOCATIVO + r"$")
+_ELOGIO = re.compile(r"^(?:voce e (?:demais|incrivel|otima|a melhor|muito boa|genial|top|sensacional|perfeita|brabissima)|"
+                     r"mandou bem|muito bem|boa|show|show de bola|perfeito|excelente|otimo|que legal|isso ai)" + _VOCATIVO + r"$")
+_TCHAU = re.compile(r"^(?:tchau|ate (?:mais|logo|amanha|depois)|falou|fui|vou (?:dormir|sair|deitar)|bom descanso|"
+                    r"boa noite e ate amanha)" + _VOCATIVO + r"$")
+_SOCIAL = ((_TUDO_BEM, "tudo_bem"), (_SAUDACAO, "saudacao"), (_PRESENTE, "presente"), (_QUEM_SOU, "quem_sou"),
+           (_ELOGIO, "elogio"), (_TCHAU, "tchau"))
+
 _CLIMA = re.compile(r"^(clima|tempo|previsao do tempo|como esta o tempo|como ta o tempo|como esta o clima|qual o clima|"
                     r"como esta o tempo hoje|previsao)( hoje| agora)?$")
 
@@ -175,6 +196,9 @@ def _casar(t: str, ctx, original: str | None = None) -> Plano | None:
         return parar
     if _OBRIGADO.match(t):
         return falar(personalidade.resposta(app.prefs, "obrigado"))
+    for padrao, chave in _SOCIAL:
+        if padrao.match(t):
+            return falar(personalidade.resposta(app.prefs, chave))
     if _HORAS.match(t):
         return lambda: f"São {formatar_hora(datetime.now())}."
     if _DATA.match(t):
