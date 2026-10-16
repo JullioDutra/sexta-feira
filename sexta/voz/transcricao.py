@@ -6,9 +6,11 @@ Em português para os comandos; com detecção de idioma para o modo tradutor.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 from collections.abc import Sequence
+from pathlib import Path
 
 import numpy as np
 
@@ -44,6 +46,7 @@ class Transcritor:
         with self._lock:
             if self._modelo is not None:
                 return
+            _registrar_dlls_cuda()
             from faster_whisper import WhisperModel
 
             raiz = str(self.pasta_modelos) if self.pasta_modelos else None
@@ -111,6 +114,26 @@ class Transcritor:
 def _mais_provavel(probabilidades: list[tuple[str, float]] | None, candidatos: Sequence[str]) -> str:
     chances = dict(probabilidades or [])
     return max(candidatos, key=lambda idioma: chances.get(idioma, 0.0))
+
+
+def _registrar_dlls_cuda() -> None:
+    """No Windows, as DLLs do CUDA instaladas pelo pip (nvidia-cublas-cu12, nvidia-cudnn-cu12) ficam dentro do
+    ambiente Python, onde o Windows não procura sozinho: registra essas pastas para o Whisper usar a GPU."""
+    if os.name != "nt":
+        return
+    try:
+        import nvidia
+    except ImportError:
+        return
+    for raiz in getattr(nvidia, "__path__", []):
+        for pasta in Path(raiz).glob("*/bin"):
+            if not pasta.is_dir() or str(pasta) in os.environ.get("PATH", ""):
+                continue
+            try:
+                os.add_dll_directory(str(pasta))
+            except OSError:
+                continue
+            os.environ["PATH"] = f"{pasta}{os.pathsep}{os.environ.get('PATH', '')}"
 
 
 def _tem_cuda() -> bool:

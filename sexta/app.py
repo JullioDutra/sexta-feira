@@ -272,6 +272,10 @@ class SextaFeira:
             asyncio.run(servir(self))
         except KeyboardInterrupt:
             pass
+        except BaseException:
+            # sem console (pythonw, atalho da área de trabalho) o erro sumiria: fica registrado no log
+            log.exception("O servidor da Sexta-Feira parou com erro")
+            raise
         finally:
             self.encerrar()
 

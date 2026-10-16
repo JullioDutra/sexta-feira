@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import logging
+import os
 import sys
 import time
 
@@ -26,6 +27,11 @@ from .logs import configurar_logs
 def main(argv: list[str] | None = None) -> int:
     from .habilidades.windows import ativar_dpi
 
+    # pythonw (atalho da área de trabalho) roda sem console: stdout/stderr ficam None e qualquer biblioteca que
+    # escreva neles (barras de progresso, avisos) quebraria. O que importa vai para o arquivo de log.
+    for nome in ("stdout", "stderr"):
+        if getattr(sys, nome) is None:
+            setattr(sys, nome, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115 - vive até o fim
     ativar_dpi()
     parser = argparse.ArgumentParser(prog="sexta", description="Sexta-Feira — assistente pessoal")
     sub = parser.add_subparsers(dest="comando")

@@ -17,7 +17,7 @@ segno>=1.6,<2
 sounddevice>=0.5,<1
 vosk>=0.3.45,<0.4
 faster-whisper>=1.2,<2
-edge-tts>=7.2,<8
+edge-tts>=7.3.1,<8
 pyttsx3>=2.98,<3
 av>=14
 

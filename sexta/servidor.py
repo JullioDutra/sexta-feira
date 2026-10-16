@@ -719,8 +719,10 @@ async def servir(app) -> None:
                                                        if cfg.endereco_externo else []))
     api = HostsPermitidos(criar_api(app, verificador), verificador)
 
-    comum = {"log_level": "warning", "proxy_headers": False, "server_header": False, "ws_ping_interval": 20,
-             "timeout_graceful_shutdown": 3}
+    # log_config=None: o log do uvicorn segue o da Sexta-Feira. A configuração própria dele usa o console, que
+    # não existe no pythonw (atalho da área de trabalho) e derrubava o servidor ao iniciar.
+    comum = {"log_level": "warning", "log_config": None, "proxy_headers": False, "server_header": False,
+             "ws_ping_interval": 20, "timeout_graceful_shutdown": 3}
     servidores = [_ServidorSemSinais(uvicorn.Config(api, host="127.0.0.1", port=cfg.porta, **comum))]
     if cfg.liberar_rede:
         ips = ips_locais()

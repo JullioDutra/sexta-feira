@@ -57,6 +57,7 @@ class Fala:
         self._preaquecendo = False
         self._edge_falhas = 0
         self._edge_pausado_ate = 0.0
+        self._ultima_foi_windows = False
         self._loop = asyncio.new_event_loop()
         self._pyttsx3 = None
         self._voz_sistema: str | None = None
@@ -231,16 +232,30 @@ class Fala:
             return self._cache[chave]
         resultado = None
         if self.app.cfg.voz_motor != "windows" and time.time() >= self._edge_pausado_ate:
-            try:
-                resultado = decodificar(self._executar(self._edge_bytes(texto, perfil)))
-                self._edge_falhas = 0
-            except Exception as erro:  # noqa: BLE001
+            # algumas vozes online (ex.: as "Multilingual") falham à toa: antes da voz do Windows, tenta a voz
+            # online padrão do .env, que é estável
+            tentativas = [perfil]
+            reserva = (self.app.cfg.voz, self.app.cfg.voz_velocidade, self.app.cfg.voz_tom)
+            if voz is None and reserva[0] != perfil[0] and reserva[0] not in PERFIS:
+                tentativas.append(reserva)
+            ultimo_erro: Exception | None = None
+            for i, tentativa in enumerate(tentativas):
+                try:
+                    resultado = decodificar(self._executar(self._edge_bytes(texto, tentativa)))
+                    self._edge_falhas = 0
+                    if i:
+                        log.info("Voz %s falhou; falei com %s", perfil[0], tentativa[0])
+                    break
+                except Exception as erro:  # noqa: BLE001
+                    ultimo_erro = erro
+            if resultado is None:
                 self._edge_falhas += 1
-                log.warning("Voz online indisponível (%s); usando voz do Windows", erro)
+                log.warning("Voz online indisponível (%s); usando voz do Windows", ultimo_erro)
                 if self._edge_falhas >= 2:
                     self._edge_pausado_ate = time.time() + 300
         if resultado is None:  # a voz do Windows fala português, ou o idioma da voz pedida ("en-US-..." -> "en")
             resultado = self._sintetizar_windows(texto, voz.split("-", 1)[0].lower() if voz else "pt")
+            self._ultima_foi_windows = True
         if efeito:
             try:
                 resultado = (efeitos.traje(resultado[0], resultado[1]), resultado[1])
@@ -294,7 +309,12 @@ class Fala:
             if geracao is None and item[0] == "__fixa__":
                 try:
                     chave = (*self._perfil(None), self._com_efeito(), item[1])
-                    self._fixas[chave] = self._sintetizar(item[1])
+                    self._ultima_foi_windows = False
+                    audio = self._sintetizar(item[1])
+                    if self._ultima_foi_windows:  # a voz do Windows é só um tapa-buraco: não fica fixa
+                        self._cache.pop(chave, None)
+                    else:
+                        self._fixas[chave] = audio
                 except Exception as erro:  # noqa: BLE001
                     log.info("Não consegui pré-gerar '%s': %s", item[1], erro)
                 continue
